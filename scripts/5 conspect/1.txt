@@ -1,0 +1,3 @@
+find ./ -type f | xargs chmod 644 для файлов 
+find ./ -type d | xargs chmod 644 для папок 
+вводить поочереди 

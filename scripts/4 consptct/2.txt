@@ -1,0 +1,4 @@
+hello world
+ a line with leading white space
+1
+!@#$%^&*()

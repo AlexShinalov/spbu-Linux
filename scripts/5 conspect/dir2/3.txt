@@ -1,0 +1,1 @@
+column -e -t -s "," mounts

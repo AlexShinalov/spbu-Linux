@@ -1,0 +1,2 @@
+find ./ -type f -exec chmog 664 {} \; для файлов
+find ./ -type d -exec chmog 664 {} \;для папок 
