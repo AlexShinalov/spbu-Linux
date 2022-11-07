@@ -1,3 +1,2 @@
 #!/bin/bash
-convert &  btf.jpg btf.png 
-
+convert & btf.jpg btf.png 

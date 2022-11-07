@@ -1,1 +1,1 @@
-find . -name "*.jpg"| mogrify -format png *.jpg
+find . -name "*.jpg" | mogrify -format png *.jpg
