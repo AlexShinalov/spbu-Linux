@@ -1,2 +1,2 @@
 #!/bin/bash
-convert & btf.jpg btf.png 
+convert & ./materials/pic2.png ./materials/pic2.jpg
