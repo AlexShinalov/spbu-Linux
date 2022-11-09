@@ -1,4 +1,2 @@
 #!/bin/bash
-convert  11.png 11.jpg
-
-
+convert ./materials/pic1.png ./materials/pic1.jpg

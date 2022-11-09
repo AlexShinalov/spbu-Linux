@@ -1,3 +1,3 @@
 #!/bin/bash
-./script3.sh&
+bash ./script3.sh &
 wait
