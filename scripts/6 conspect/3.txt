@@ -1,0 +1,6 @@
+сборка с линковкой:
+g++ -o testl -Idir sha1_benchmark.cc sha1.cc -Idir -O3
+тест времени:
+time ./testl
+
+ВАЖНО: измените testl на любое другое название 

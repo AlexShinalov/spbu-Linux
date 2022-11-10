@@ -1,0 +1,8 @@
+Сборка с тестами:
+g++ -o testp sha1_benchmark.cc sha1.cc -fprofile-generate
+time ./testp
+
+g++ -o testp sha1_benchmark.cc sha1.cc -fprofile-use
+time ./testp 
+
+ВАЖНО: изменить все testp на любое другое название 

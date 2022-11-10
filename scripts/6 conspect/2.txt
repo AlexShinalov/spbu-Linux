@@ -1,0 +1,8 @@
+2) сборка программы:
+g++ -o tests sha1_benchmark.cc sha1.cc -O3    быстрая
+g++ -o testf sha1_benchmark.cc sha1.cc        медленная 
+ВАЖНО: измените tests и testf на любые другие названия 
+Запуск теста времени:
+time ./tests  
+после завершения 
+time ./testm
