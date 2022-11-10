@@ -13,6 +13,3 @@ int main() {
     cout << "None" << endl;
     #endif
 }
-
-// компиляция: g++ -DUSE_GPU -DUSE_FLOAT main.cpp
-// запуск: ./a.out
