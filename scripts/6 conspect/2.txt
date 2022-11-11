@@ -5,4 +5,4 @@ g++ -o testf sha1_benchmark.cc sha1.cc        медленная
 Запуск теста времени:
 time ./tests  
 после завершения 
-time ./testm
+time ./testf

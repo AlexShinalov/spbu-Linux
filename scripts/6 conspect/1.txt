@@ -1,0 +1,8 @@
+Компиляция (одна из этих команд):
+g++ -DUSE_GPU -DUSE_FLOAT 1.cpp
+g++ -DUSE_GPU 1.cpp
+g++ -DUSE_FLOAT 1.cpp
+g++ 1.cpp
+
+Запуск:
+./a.out
