@@ -1,5 +1,5 @@
 сборка с линковкой:
-g++ -o testl -Idir sha1_benchmark.cc sha1.cc -Idir -O3
+g++ -O3 -flto -o testl sha1_benchmark.cc sha1.cc
 тест времени:
 time ./testl
 
