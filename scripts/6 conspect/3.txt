@@ -1,6 +1,15 @@
-сборка с линковкой:
-g++ -O3 -flto -o testl sha1_benchmark.cc sha1.cc
-тест времени:
-time ./testl
+Компиляция:
+g++ -c sha1_benchmark.cc -o filename1.o
+g++ -c sha1.cc -o filename2.o
 
-ВАЖНО: измените testl на любое другое название 
+Линковка без оптимизации:
+g++ filename1.o filename2.o -o final1
+
+Линковка с оптимизацией:
+g++ filename1.o filename2.o -o final2 -O3
+
+Тест времени:
+time ./final1
+time ./final2
+
+ВАЖНО: измените filename, final на любое другое название 
