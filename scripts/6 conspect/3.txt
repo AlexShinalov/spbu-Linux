@@ -1,3 +1,6 @@
+TODO: проверить на работоспособность
+сборка с линковкой:
+g++ -O3 -flto -o test1 sha1_benchmark.cc sha1.cc
 Компиляция:
 g++ -c sha1_benchmark.cc -o filename1.o
 g++ -c sha1.cc -o filename2.o
