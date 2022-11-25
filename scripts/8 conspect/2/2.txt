@@ -1,0 +1,1 @@
+env CC=g++ LDFLAGS="$(pkg-config --libs zlib)" make main
