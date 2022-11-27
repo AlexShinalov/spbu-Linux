@@ -1,9 +1,0 @@
-#!/bin/sh
-
-meson configure -Dprefix=/tmp/install
-ninja install
-(cd ../src && find . -type f -regex '\.[^.]+$' -regextype posix-extended | sort) > /tmp/expected
-(cd /tmp/install/include && find . -type f | sort) > /tmp/actual
-
-echo 'Missing headers:'
-comm -2 -3 /tmp/expected /tmp/actual
