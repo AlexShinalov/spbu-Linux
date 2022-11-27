@@ -7,6 +7,8 @@ project(
     license: ['Public domain']
 )
 
+add_project_arguments('-O3', '-flto', '-march=native',  language : 'cpp')
+
 with_tests = get_option('with_tests')
 with_site = get_option('with_site')
 with_backtrace_on_exception = get_option('with_backtrace_on_exception')

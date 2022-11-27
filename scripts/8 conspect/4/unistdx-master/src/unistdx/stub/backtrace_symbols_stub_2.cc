@@ -54,7 +54,7 @@ backtrace_symbols(void *const *, int n) throw () {
         std::malloc((sizeof(Bytes)*n + sizeof(char)*entry_size*n) | sizeof(Bytes))
     );
     char* buf = *ppbuf;
-    if (!buf) { std::terminate(); }
+    if (!buf) { std::exit(0)); }
     // skip pointers area
     char* pbuf = buf + sizeof(Bytes)*n;
     assert(size_t(pbuf) % sizeof(Bytes) == 0);
