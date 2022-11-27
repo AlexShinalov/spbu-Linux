@@ -1,0 +1,89 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_BASE_STREAMBUF_TRAITS
+#define UNISTDX_BASE_STREAMBUF_TRAITS
+
+#include <streambuf>
+
+namespace sys {
+
+    /**
+    \brief Traits that abstract read and write operations for stream buffers.
+    \date 2018-05-22
+    \ingroup traits
+    \details
+    \arg With this class it is possible to plug arbitrary object (including
+    another stream buffer) as a source or sink for stream buffer using
+    \link basic_fildesbuf \endlink.
+    \arg Generic implementation is done for \link std::streambuf \endlink.
+    */
+    template<class T>
+    struct streambuf_traits {
+
+        /// Character type.
+        typedef typename T::char_type char_type;
+
+        /**
+        Write \p n bytes from array pointed by \p s to buffer \p buf.
+        */
+        inline static std::streamsize
+        write(T& buf, const char_type* s, std::streamsize n) {
+            return buf.sputn(s, n);
+        }
+
+        /**
+        Read \p n bytes to array pointed by \p s from buffer \p buf.
+        */
+        inline static std::streamsize
+        read(T& buf, char_type* s, std::streamsize n) {
+            return buf.sgetn(s, n);
+        }
+
+        /// Check if the source/sink is blocking.
+        inline static bool
+        is_blocking(const T&) {
+            return false;
+        }
+
+        /// Check how many bytes are available for reading in buffer \p buf.
+        inline static std::streamsize
+        in_avail(T& buf) {
+            return buf.in_avail();
+        }
+
+    };
+
+
+}
+
+#endif // vim:filetype=cpp

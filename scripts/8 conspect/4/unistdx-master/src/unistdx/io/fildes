@@ -1,0 +1,875 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2016, 2017, 2018, 2019, 2020, 2021 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_IO_FILDES
+#define UNISTDX_IO_FILDES
+
+#include <fcntl.h>
+#include <sys/uio.h>
+#include <unistd.h>
+
+#include <ostream>
+
+#include <unistdx/config>
+#if defined(UNISTDX_HAVE_SYS_IOCTL_H)
+#include <sys/ioctl.h>
+#endif
+#if defined(UNISTDX_HAVE_LINUX_SOCKIOS_H)
+#include <linux/sockios.h>
+#endif
+
+#include <unistdx/base/check>
+#include <unistdx/base/streambuf_traits>
+#include <unistdx/base/string>
+#include <unistdx/fs/file_attributes>
+#include <unistdx/fs/file_status>
+#include <unistdx/io/fd_type>
+#include <unistdx/io/open_flag>
+
+#ifndef NDEBUG
+#include <iostream>
+#endif
+
+namespace sys {
+
+    typedef ::mode_t mode_type;
+
+    /// File descriptor flags.
+    enum class fd_flag: int {
+        fd_close_on_exec = FD_CLOEXEC
+    };
+
+    template <>
+    struct is_flag<fd_flag>: public std::true_type {};
+
+    #if defined(UNISTDX_HAVE_F_SETNOSIGPIPE)
+    /// File descriptor pipe flags.
+    enum class pipe_flag: int {
+        no_sigpipe = F_SETNOSIGPIPE
+    };
+
+    template <>
+    struct is_flag<pipe_flag>: public std::true_type {};
+    #endif
+
+    /**
+    \brief Origin of file seek operations.
+    \ingroup io
+    */
+    enum class seek_origin: int {
+        start=SEEK_SET,
+        current=SEEK_CUR,
+        end=SEEK_END,
+        #if defined(UNISTDX_HAVE_SEEK_DATA)
+        data=SEEK_DATA,
+        #endif
+        #if defined(UNISTDX_HAVE_SEEK_HOLE)
+        hole=SEEK_HOLE,
+        #endif
+    };
+
+    struct io_vector: public ::iovec {
+        inline io_vector(void* data, size_t size) noexcept:
+        ::iovec{data,size} {}
+
+        inline void* data() noexcept { return this->iov_base; }
+        inline const void* data() const noexcept { return this->iov_base; }
+        inline size_t size() const noexcept { return this->iov_len; }
+        inline bool empty() const noexcept { return size() == 0; }
+
+        io_vector() = default;
+        ~io_vector() = default;
+        io_vector(const io_vector&) = default;
+        io_vector& operator=(const io_vector&) = default;
+        io_vector(io_vector&&) = default;
+        io_vector& operator=(io_vector&&) = default;
+    };
+
+    class file_descriptor_view {
+
+    public:
+        /// Invalid file descriptor constant.
+        static constexpr const fd_type bad = -1;
+
+    protected:
+        fd_type _fd = bad;
+
+    public:
+
+        inline explicit file_descriptor_view(fd_type fd) noexcept: _fd{fd} {};
+        inline fd_type get() const noexcept { return this->_fd; }
+        bool is_socket() const noexcept;
+
+        file_descriptor_view() = default;
+        ~file_descriptor_view() = default;
+        file_descriptor_view(const file_descriptor_view&) = default;
+        file_descriptor_view& operator=(const file_descriptor_view&) = default;
+        file_descriptor_view(file_descriptor_view&&) = default;
+        file_descriptor_view& operator=(file_descriptor_view&&) = default;
+
+    };
+
+    /**
+    \brief File descriptor wrapper.
+    \date 2018-05-22
+    \ingroup wrapper io
+    */
+    class fildes {
+
+    private:
+        typedef int flag_type;
+
+    public:
+        enum class operation {
+            #if defined(UNISTDX_HAVE_FIONREAD)
+            bytes_available = FIONREAD,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFFLAGS)
+            interface_get_flags = SIOCGIFFLAGS,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFFLAGS)
+            interface_set_flags = SIOCSIFFLAGS,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCADDMULTI)
+            interface_add_multicast = SIOCADDMULTI,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCDELMULTI)
+            interface_del_multicast = SIOCDELMULTI,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCDIFADDR)
+            interface_delete_address = SIOCDIFADDR,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFADDR)
+            interface_get_address = SIOCGIFADDR,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFADDR)
+            interface_set_address = SIOCSIFADDR,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFBRDADDR)
+            interface_get_broadcast_address = SIOCGIFBRDADDR,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFBRDADDR)
+            interface_set_broadcast_address = SIOCSIFBRDADDR,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFCONF)
+            list_interface_addresses = SIOCGIFCONF,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFCOUNT)
+            num_interfaces = SIOCGIFCOUNT,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFDSTADDR)
+            interface_get_destination_address = SIOCGIFDSTADDR,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFDSTADDR)
+            interface_set_destination_address = SIOCSIFDSTADDR,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFENCAP)
+            interface_get_encapsulation = SIOCGIFENCAP,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFENCAP)
+            interface_set_encapsulation = SIOCSIFENCAP,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFHWADDR)
+            interface_get_hardware_address = SIOCGIFHWADDR,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFHWADDR)
+            interface_set_hardware_address = SIOCSIFHWADDR,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFINDEX)
+            interface_get_index = SIOCGIFINDEX,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFMEM)
+            interface_get_memory_address = SIOCGIFMEM,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFMEM)
+            interface_set_memory_address = SIOCSIFMEM,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFMETRIC)
+            interface_get_metric = SIOCGIFMETRIC,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFMETRIC)
+            interface_set_metric = SIOCSIFMETRIC,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFMTU)
+            interface_get_mtu = SIOCGIFMTU,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFMTU)
+            interface_set_mtu = SIOCSIFMTU,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFNAME)
+            interface_get_name = SIOCGIFNAME,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFNAME)
+            interface_set_name = SIOCSIFNAME,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFNETMASK)
+            interface_get_network_mask = SIOCGIFNETMASK,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFNETMASK)
+            interface_set_network_mask = SIOCSIFNETMASK,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFPFLAGS)
+            interface_get_private_flags = SIOCGIFPFLAGS,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFPFLAGS)
+            interface_set_private_flags = SIOCSIFPFLAGS,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCGIFSLAVE)
+            interface_get_slave = SIOCGIFSLAVE,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFSLAVE)
+            interface_set_slave = SIOCSIFSLAVE,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFHWBROADCAST)
+            interface_set_hardware_broadcast_address = SIOCSIFHWBROADCAST,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCSIFLINK)
+            interface_set_channel = SIOCSIFLINK,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCBRADDBR)
+            bridge_add = SIOCBRADDBR,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCBRDELBR)
+            bridge_del = SIOCBRDELBR,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCBRADDIF)
+            bridge_add_interface = SIOCBRADDIF,
+            #endif
+            #if defined(UNISTDX_HAVE_SIOCBRDELIF)
+            bridge_del_interface = SIOCBRDELIF,
+            #endif
+        };
+
+    public:
+
+        /// Invalid file descriptor constant.
+        static constexpr const fd_type bad = -1;
+
+    protected:
+        /// File descriptor number
+        fd_type _fd = bad;
+
+    public:
+
+        inline fildes() = default;
+
+        /**
+        \brief
+        Change file descriptor number to an arbitrrary one
+        by duplicating it with \man{dup,2} system call.
+        \throws bad_call
+        \see \man{dup,2}
+        */
+        inline
+        fildes(const fildes& rhs):
+        _fd(::dup(rhs._fd)) {
+            UNISTDX_CHECK(this->_fd);
+        }
+
+        /**
+        \brief
+        Rename file descriptor number of \p rhs to \c this->fd()
+        by duplicating it with \man{dup2,2} system call.
+        \throws bad_call
+        \see \man{dup2,2}
+        */
+        inline
+        fildes(fildes&& old_fd, const fildes& new_fd,
+               open_flag flags=open_flag::close_on_exec):
+        _fd(old_fd._fd) {
+            old_fd._fd = bad;
+            #if defined(UNISTDX_HAVE_DUP3)
+            this->_fd = ::dup3(new_fd._fd, this->_fd, int(flags));
+            #else
+            this->_fd = ::dup2(new_fd._fd, this->_fd);
+            #endif
+            UNISTDX_CHECK(this->_fd);
+        }
+
+        inline
+        fildes(fd_type old_fd, const fildes& new_fd,
+               open_flag flags=open_flag::close_on_exec):
+        fildes{fildes{old_fd}, new_fd, flags} {}
+
+        /**
+        \brief
+        Change file descriptor number of \p rhs to \c this->fd()
+        by duplicating it with \man{dup2,2} system call.
+        \throws bad_call
+        \see \man{dup2,2}
+        */
+        fildes&
+        operator=(const fildes& rhs);
+
+        /// Construct file descriptor by wrapping \p rhs.
+        inline explicit
+        fildes(fd_type rhs) noexcept:
+        _fd(rhs)
+        {}
+
+        /// Move-constructor.
+        inline
+        fildes(fildes&& rhs) noexcept: _fd(rhs._fd) {
+            rhs._fd = bad;
+        }
+
+        /**
+        Construct file descriptor by opening file \p filename with
+        open flags \p flags and mode \p mode.
+        */
+        inline
+        fildes(const char* filename, open_flag flags=open_flag(), mode_type mode=0) {
+            this->open(filename, flags, mode);
+        }
+
+        /**
+        \brief Close file descriptor
+        \details
+        The method ignores errors reported by \man{close,2} system call.
+        */
+        inline
+        ~fildes() noexcept {
+            this->close();
+        }
+
+        /// Move-assignment.
+        inline fildes&
+        operator=(fildes&& rhs) noexcept {
+            this->swap(rhs);
+            return *this;
+        }
+
+        /**
+        \brief Close file descriptor.
+        \throws bad_call if \man{close,2} system call fails
+        \see \man{close,2}
+        */
+        inline void
+        close() {
+            if (*this) {
+                UNISTDX_CHECK(::close(this->_fd));
+                this->_fd = bad;
+            }
+        }
+
+        /**
+        \brief Release and return raw file descriptor.
+        \details After the release you have to manually close the file descriptor.
+        */
+        inline fd_type release() { auto fd = this->_fd; this->_fd = bad; return fd; }
+
+        /**
+        \brief Read \p n bytes from file descriptor and store them in the array
+        pointed by \p buf.
+        \throws_bad_call_non_blocking
+        \see \man{read,2}
+        */
+        inline ssize_t
+        read(void* buf, size_t n) const {
+            ssize_t ret = ::read(this->_fd, buf, n);
+            UNISTDX_CHECK_IO(ret);
+            return ret;
+        }
+
+        /**
+        \brief Write \p n bytes to file descriptor copying them from the array
+        pointer by \p buf.
+        \throws_bad_call_non_blocking
+        \see \man{write,2}
+        */
+        inline ssize_t
+        write(const void* buf, size_t n) const {
+            ssize_t ret = ::write(this->_fd, buf, n);
+            UNISTDX_CHECK_IO(ret);
+            return ret;
+        }
+
+        inline ssize_t
+        read(const io_vector* buffers, size_t n) const {
+            ssize_t ret = ::readv(this->_fd, buffers, n);
+            UNISTDX_CHECK_IO(ret);
+            return ret;
+        }
+
+        inline ssize_t
+        write(const io_vector* buffers, size_t n) {
+            ssize_t ret = ::writev(this->_fd, buffers, n);
+            UNISTDX_CHECK_IO(ret);
+            return ret;
+        }
+
+        /**
+        \brief Get the current file offset in bytes.
+        \throws bad_call
+        \see \man{lseek,2}
+        */
+        inline offset_type
+        offset() const {
+            auto ret = ::lseek(this->_fd, 0, SEEK_CUR);
+            UNISTDX_CHECK(ret);
+            return ret;
+        }
+
+        /**
+        \brief Set the current file offset in bytes.
+        \throws bad_call
+        \see \man{lseek,2}
+        */
+        inline offset_type
+        offset(offset_type rhs) {
+            return this->offset(rhs, seek_origin::start);
+        }
+
+        /**
+        \brief Set the current file offset in bytes starting from the specified origin.
+        \throws bad_call
+        \see \man{lseek,2}
+        */
+        inline offset_type
+        offset(offset_type nbytes, seek_origin origin) {
+            auto ret = ::lseek(this->_fd, nbytes, static_cast<int>(origin));
+            UNISTDX_CHECK(ret);
+            return ret;
+        }
+
+        /**
+        \brief Set file size in bytes.
+        \throws bad_call
+        \see \man{ftruncate,2}
+        */
+        inline void
+        truncate(offset_type length) {
+            UNISTDX_CHECK(::ftruncate(this->_fd, length));
+        }
+
+        /**
+        \brief Write file data and metadata from system memory to the disk.
+        \throws bad_call
+        \see \man{fsync,2}
+        */
+        inline void sync() { UNISTDX_CHECK(::fsync(this->_fd)); }
+
+        /**
+        \brief Write file data (but not metadata) from system memory to the disk.
+        \throws bad_call
+        \see \man{fdatasync,2}
+        */
+        inline void sync_data() { UNISTDX_CHECK(::fdatasync(this->_fd)); }
+
+        /**
+        \brief Write file system cache to disk.
+        \throws bad_call
+        \see \man{syncfs,2}
+        */
+        inline void sync_file_system() { UNISTDX_CHECK(::syncfs(this->_fd)); }
+
+        /// Get bare file descriptor.
+        inline fd_type fd() const noexcept { return this->_fd; }
+
+        /// Get bare file descriptor.
+        inline fd_type get() const noexcept { return this->_fd; }
+
+        /**
+        \brief Get file descriptor open flags.
+        \throws bad_call
+        \see \man{fcntl,2}
+        */
+        inline open_flag
+        flags() const {
+            return open_flag(this->manipulate(F_GETFL));
+        }
+
+        /**
+        \brief Get file descriptor flags.
+        \throws bad_call
+        \see \man{fcntl,2}
+        */
+        inline fd_flag
+        fd_flags() const {
+            return fd_flag(this->manipulate(F_GETFD));
+        }
+
+        /**
+        \brief Set file descriptor open flags.
+        \throws bad_call
+        \see \man{fcntl,2}
+        */
+        inline void
+        setf(open_flag rhs) {
+            this->manipulate(F_SETFL, flag_type(this->flags() | rhs));
+        }
+
+        /**
+        \brief Unset file descriptor open flags.
+        \throws bad_call
+        \see \man{fcntl,2}
+        */
+        inline void
+        unsetf(open_flag rhs) {
+            this->manipulate(F_SETFL, flag_type(this->flags() & ~rhs));
+        }
+
+        #if defined(UNISTDX_HAVE_F_SETNOSIGPIPE)
+        /**
+        \brief Set file descriptor pipe flags.
+        \throws bad_call
+        \see \man{fcntl,2}
+        */
+        inline void
+        setf(pipe_flag rhs) {
+            this->manipulate(int(rhs), 1);
+        }
+
+        /**
+        \brief Unset file descriptor pipe flags.
+        \throws bad_call
+        \see \man{fcntl,2}
+        */
+        inline void
+        unsetf(pipe_flag rhs) {
+            this->manipulate(int(rhs), 0);
+        }
+        #endif
+
+        /**
+        \brief Set file descriptor flags.
+        \throws bad_call
+        \see \man{fcntl,2}
+        */
+        inline void
+        setf(fd_flag rhs) {
+            this->manipulate(F_SETFD, flag_type(rhs));
+        }
+
+        /**
+        \brief Unset file descriptor flags.
+        \throws bad_call
+        \see \man{fcntl,2}
+        */
+        inline void
+        unsetf(fd_flag rhs) {
+            this->manipulate(F_SETFD, flag_type(this->fd_flags() & ~rhs));
+        }
+
+        #if defined(UNISTDX_HAVE_F_GETPIPE_SZ)
+        /**
+        \brief Get pipe buffer size.
+        \throws bad_call
+        \see \man{fcntl,2}
+        */
+        inline int
+        pipe_buffer_size() const {
+            return this->manipulate(F_GETPIPE_SZ);
+        }
+        #endif
+
+        #if defined(UNISTDX_HAVE_F_SETPIPE_SZ)
+        /**
+        \brief Get pipe buffer size.
+        \throws bad_call
+        \see \man{fcntl,2}
+        */
+        inline int
+        pipe_buffer_size(int new_size) {
+            return this->manipulate(F_SETPIPE_SZ, new_size);
+        }
+        #endif
+
+        /// Compare file descriptors.
+        inline bool
+        operator==(const fildes& rhs) const noexcept {
+            return this->_fd == rhs._fd;
+        }
+
+        /// Compare file descriptors.
+        inline bool
+        operator!=(const fildes& rhs) const noexcept {
+            return !this->operator==(rhs);
+        }
+
+        /// Returns true, if file descriptor is valid.
+        inline explicit
+        operator bool() const noexcept {
+            return this->_fd >= 0;
+        }
+
+        /// Returns true, if file descriptor is invalid.
+        inline bool
+        operator !() const noexcept {
+            return !this->operator bool();
+        }
+
+        /// Output file descriptor number.
+        inline friend std::ostream&
+        operator<<(std::ostream& out, const fildes& rhs) {
+            return out << rhs._fd;
+        }
+
+        /// Swap with \p rhs.
+        inline void
+        swap(fildes& rhs) noexcept {
+            std::swap(this->_fd, rhs._fd);
+        }
+
+        /**
+        \brief
+        Check if this file descriptor exists in the kernel
+        by trying to get its flags
+        \throws bad_call
+        */
+        inline void
+        validate() {
+            this->manipulate(F_GETFD);
+        }
+
+        /**
+        \brief
+        Init file descriptor by opening file \p filename with
+        open flags \p flags and mode \p mode.
+        \throws bad_call
+        */
+        inline void
+        open(const char* filename, open_flag flags=open_flag(), mode_type mode=0) {
+            this->close();
+            this->_fd = ::open(
+                filename,
+                static_cast<flag_type>(flags|open_flag::close_on_exec),
+                mode
+            );
+            UNISTDX_CHECK(this->_fd);
+        }
+
+        /// Get file status for this file descriptor.
+        inline file_status
+        status() const {
+            return file_status{this->_fd};
+        }
+
+        #if defined(UNISTDX_HAVE_IOCTL)
+        template <class T>
+        inline void call(operation op, T& argument) {
+            UNISTDX_CHECK(::ioctl(this->_fd, static_cast<int>(op), &argument));
+        }
+        #endif
+
+        #if defined(UNISTDX_HAVE_IOCTL)
+        inline void call(operation op) {
+            UNISTDX_CHECK(::ioctl(this->_fd, static_cast<int>(op)));
+        }
+        #endif
+
+        #if defined(UNISTDX_HAVE_SYS_XATTR_H)
+        std::string attribute(c_string name) const;
+        void attribute(c_string name, const_string value,
+                       file_attribute_flags f1=file_attribute_flags{});
+        void remove_attribute(c_string name);
+        file_attributes attributes() const;
+        #endif
+
+    private:
+
+        inline int
+        manipulate(int which) const {
+            int ret;
+            UNISTDX_CHECK(ret = ::fcntl(this->_fd, which));
+            return ret;
+        }
+
+        inline int
+        manipulate(int which, int val) {
+            int ret;
+            UNISTDX_CHECK(ret = ::fcntl(this->_fd, which, val));
+            return ret;
+        }
+
+        /**
+        \brief
+        Replace file descriptor \p new_fd with \p old_fd using \man{dup2,2} system call.
+        \throws bad_call
+        \see \man{dup2,2}
+        */
+        friend void
+        replace(const fildes& new_fd, fildes& old_fd, open_flag flags=open_flag{}) {
+            if (old_fd == new_fd) { return; }
+            #if defined(UNISTDX_HAVE_DUP3)
+            old_fd._fd = ::dup3(new_fd._fd, old_fd._fd, int(flags));
+            #else
+            old_fd._fd = ::dup2(new_fd._fd, old_fd._fd);
+            #endif
+            UNISTDX_CHECK(old_fd._fd);
+        }
+
+    };
+
+    static_assert(sizeof(fildes) == sizeof(fd_type), "bad fd size");
+
+    /// Compare file descriptors.
+    inline bool
+    operator==(fd_type lhs, const fildes& rhs) noexcept {
+        return rhs.fd() == lhs;
+    }
+
+    /// Compare file descriptors.
+    inline bool
+    operator==(const fildes& lhs, fd_type rhs) noexcept {
+        return lhs.fd() == rhs;
+    }
+
+    /// Compare file descriptors.
+    inline bool
+    operator!=(fd_type lhs, const fildes& rhs) noexcept {
+        return !operator==(lhs, rhs);
+    }
+
+    /// Compare file descriptors.
+    inline bool
+    operator!=(const fildes& lhs, fd_type rhs) noexcept {
+        return !operator==(lhs, rhs);
+    }
+
+    /// Overload of \link std::swap \endlink for \link fildes \endlink.
+    inline void
+    swap(fildes& lhs, fildes& rhs) noexcept {
+        lhs.swap(rhs);
+    }
+
+    /**
+    \brief
+    Base class for File descriptor \link streambuf_traits \endlink.
+    \date 2018-05-22
+    \ingroup traits io
+    */
+    template<class T>
+    struct fildes_streambuf_traits {
+
+        /// Character type.
+        typedef void char_type;
+
+        /**
+        Write \p n bytes from array pointed by \p s to buffer \p buf.
+        */
+        inline static std::streamsize
+        write(T& sink, const char_type* s, std::streamsize n) {
+            return sink.write(s, n);
+        }
+
+        /**
+        Read \p n bytes to array pointed by \p s from buffer \p buf.
+        */
+        inline static std::streamsize
+        read(T& src, char_type* s, std::streamsize n) {
+            return src.read(s, n);
+        }
+
+        /**
+        Determine if file descriptor is in bloking mode
+        by checking its flags.
+        */
+        inline static bool
+        is_blocking(const T& rhs) {
+            try {
+                return static_cast<int>(rhs.flags() & open_flag::non_blocking);
+            } catch (sys::bad_call& err) {
+                return false;
+            }
+        }
+
+        /**
+        Determine how many bytes are available for reading from kernel buffer.
+        */
+        inline static std::streamsize
+        in_avail(T& rhs) {
+            #if defined(UNISTDX_HAVE_IOCTL) && defined(UNISTDX_HAVE_FIONREAD)
+            int n = 0;
+            rhs.call(fildes::operation::bytes_available, n);
+            return n;
+            #else
+            return 0;
+            #endif
+        }
+
+    };
+
+    /**
+    \brief
+    Stream buffer traits for \link fildes \endlink.
+    \date 2018-05-22
+    \ingroup traits io
+    */
+    template<>
+    struct streambuf_traits<fildes>:
+    public fildes_streambuf_traits<fildes>
+    {};
+
+    /**
+    \brief
+    Stream buffer traits for bare \link fd_type \endlink.
+    \date 2018-05-22
+    \ingroup traits io
+    */
+    template<>
+    struct streambuf_traits<fd_type> {
+
+        /// Character type.
+        typedef void char_type;
+
+        /**
+        Write \p n bytes from array pointed by \p s to file descriptor \p sink.
+        */
+        inline static std::streamsize
+        write(fd_type sink, const char_type* s, std::streamsize n) {
+            ssize_t ret = ::write(sink, s, n);
+            UNISTDX_CHECK_IO(ret);
+            return ret;
+        }
+
+        /**
+        Read \p n bytes to array pointed by \p s from file descriptor \p src.
+        */
+        inline static std::streamsize
+        read(fd_type src, char_type* s, std::streamsize n) {
+            ssize_t ret = ::read(src, s, n);
+            UNISTDX_CHECK_IO(ret);
+            return ret;
+        }
+
+    };
+
+    /**
+    \brief Write file system cache to disk. Affects all mounted file systems.
+    \see \man{sync,2}
+    */
+    inline void sync_file_systems() { ::sync(); }
+
+}
+
+#endif // vim:filetype=cpp

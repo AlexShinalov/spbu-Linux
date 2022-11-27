@@ -1,0 +1,162 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2016, 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_IT_BASIC_ISTREAM_ITERATOR
+#define UNISTDX_IT_BASIC_ISTREAM_ITERATOR
+
+#include <iterator>
+
+namespace sys {
+
+    /**
+    \brief
+    Input stream iterator that works with any stream, not just \link std::istream \endlink.
+    \date 2018-05-22
+    \ingroup iter
+    */
+    template<class Stream, class Value>
+    class basic_istream_iterator:
+        public std::iterator<std::input_iterator_tag, Value> {
+
+    private:
+        typedef Stream stream_type;
+        typedef typename std::iterator<std::input_iterator_tag, Value>
+            base_type;
+
+    public:
+        using typename base_type::iterator_category;
+        using typename base_type::value_type;
+        using typename base_type::pointer;
+        using typename base_type::reference;
+        using typename base_type::difference_type;
+
+    private:
+        typedef const value_type* const_pointer;
+        typedef const value_type& const_reference;
+
+    private:
+        stream_type* _stream = nullptr;
+        value_type _value;
+
+    public:
+
+        /// Construct input stream iterator from input stream \p rhs.
+        inline explicit
+        basic_istream_iterator(stream_type& rhs):
+        _stream(&rhs) {
+            this->next();
+        }
+
+        basic_istream_iterator() = default;
+
+        inline
+        ~basic_istream_iterator() = default;
+
+        /// Copy-constructor.
+        basic_istream_iterator(const basic_istream_iterator&) = default;
+
+        /// Move-constructor.
+        inline
+        basic_istream_iterator(basic_istream_iterator&& rhs):
+        _stream(rhs._stream),
+        _value(std::move(rhs._value)) {
+            rhs._stream = nullptr;
+        }
+
+        /// Assignment operator.
+        inline basic_istream_iterator&
+        operator=(const basic_istream_iterator&) = default;
+
+        /// Returns true, if iterators use the same stream.
+        inline bool
+        operator==(const basic_istream_iterator& rhs) const noexcept {
+            return this->_stream == rhs._stream;
+        }
+
+        /// Returns true, if iterators use different streams.
+        inline bool
+        operator!=(const basic_istream_iterator& rhs) const noexcept {
+            return !operator==(rhs);
+        }
+
+        /// Dereference.
+        inline reference
+        operator*() noexcept {
+            return this->_value;
+        }
+
+        /// Dereference.
+        inline const_reference
+        operator*() const noexcept {
+            return this->_value;
+        }
+
+        /// Access object by pointer.
+        inline pointer
+        operator->() noexcept {
+            return &this->_value;
+        }
+
+        /// Access object by pointer.
+        inline const_pointer
+        operator->() const noexcept {
+            return &this->_value;
+        }
+
+        /// Increment.
+        inline basic_istream_iterator&
+        operator++() {
+            this->next(); return *this;
+        }
+
+        /// Post-increment.
+        inline basic_istream_iterator
+        operator++(int) {
+            basic_istream_iterator tmp(*this);
+            this->next();
+            return tmp;
+        }
+
+    private:
+
+        inline void
+        next() {
+            if (!(*this->_stream >> this->_value)) {
+                this->_stream = nullptr;
+            }
+        }
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

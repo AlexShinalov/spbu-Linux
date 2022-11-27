@@ -1,0 +1,136 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2019, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_BITS_ADDR_PARSE
+#define UNISTDX_BITS_ADDR_PARSE
+
+#include <istream>
+#include <limits>
+#include <ostream>
+
+namespace sys {
+
+    namespace bits {
+
+        template<char C>
+        struct Const_char {
+
+            inline friend std::ostream&
+            operator<<(std::ostream& out, Const_char) {
+                return out << C;
+            }
+
+            inline friend std::istream&
+            operator>>(std::istream& in, Const_char) {
+                if (in.get() != C) in.setstate(std::ios::failbit);
+                return in;
+            }
+
+        };
+
+        template<class Base, class Rep>
+        struct Num {
+
+            inline constexpr
+            Num():
+            n(0) {}
+
+            inline constexpr
+            Num(Base x):
+            n(x) {}
+
+            inline friend std::ostream&
+            operator<<(std::ostream& out, Num rhs) {
+                return out << rhs.n;
+            }
+
+            inline friend std::istream&
+            operator>>(std::istream& in, Num& rhs) {
+                Rep rep;
+                in >> rep;
+                if (rep > std::numeric_limits<Base>::max()) {
+                    in.setstate(std::ios::failbit);
+                } else {
+                    rhs.n = static_cast<Base>(rep);
+                }
+                return in;
+            }
+
+            inline constexpr
+            operator Base() const {
+                return n;
+            }
+
+            inline constexpr Base
+            rep() const {
+                return n;
+            }
+
+        private:
+            Base n;
+        };
+
+        template<class Base, class Rep>
+        struct Number {
+
+            Base& _number;
+
+            inline explicit
+            Number(Base& x): _number(x) {}
+
+            inline friend std::ostream&
+            operator<<(std::ostream& out, const Number& rhs) {
+                return out << static_cast<Rep>(rhs._number);
+            }
+
+            inline friend std::istream&
+            operator>>(std::istream& in, const Number& rhs) {
+                Rep rep{};
+                in >> rep;
+                if (rep > std::numeric_limits<Base>::max()) {
+                    in.setstate(std::ios::failbit);
+                } else {
+                    rhs._number = static_cast<Base>(rep);
+                }
+                return in;
+            }
+
+        };
+
+        typedef Const_char<':'> Colon;
+        typedef Const_char<'.'> Dot;
+
+    }
+
+}
+
+#endif // vim:filetype=cpp

@@ -1,0 +1,107 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_FS_DIRECTORY
+#define UNISTDX_FS_DIRECTORY
+
+#include <unistdx/fs/idirectory>
+#include <unistdx/fs/odirectory>
+
+namespace sys {
+
+    /**
+    \brief Directory entry input/output stream.
+    \date 2018-05-25
+    \ingroup stream fs
+    \tparam FilePred file predicate type, that determines which
+    directory entries to include in the stream.
+    \tparam Trans transformation function type
+    */
+    template<class FilePred, class Trans>
+    class basic_directory:
+        public basic_idirectory<FilePred>,
+        public basic_odirectory<Trans> {
+
+    private:
+        typedef basic_idirectory<FilePred> idir_type;
+        typedef basic_odirectory<Trans> odir_type;
+
+    public:
+        using typename idir_type::filepred_type;
+        using typename odir_type::transform;
+
+        /**
+        Open directory \p p as an input directori for reading entries
+        and set it as output directory.
+        */
+        inline void
+        open(const path& p) {
+            this->idir_type::open(p);
+            this->odir_type::open(p);
+        }
+
+        /// \copydoc basic_idirectory::close
+        inline void
+        close() {
+            this->idir_type::close();
+        }
+
+        /// Get input/output directory.
+        inline const path&
+        getpath() const noexcept {
+            return this->idir_type::getpath();
+        }
+
+        /// Returns true if input stream is in good state.
+        inline explicit
+        operator bool() const noexcept {
+            return this->idir_type::operator bool() &&
+                   this->odir_type::operator bool();
+        }
+
+        /// Returns true if input stream is not in good state.
+        inline bool
+        operator!() const noexcept {
+            return !this->operator bool();
+        }
+
+    };
+
+    /**
+    Directory entry input stream that ignores all hidden files
+    during traversal and output stream that copies all files verbatim.
+    */
+    typedef basic_directory<ignore_hidden_files,copy_verbatim> directory;
+
+}
+
+#endif // vim:filetype=cpp

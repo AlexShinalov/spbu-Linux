@@ -1,0 +1,167 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_BASE_COMMAND_LINE
+#define UNISTDX_BASE_COMMAND_LINE
+
+#include <exception>
+#include <functional>
+#include <sstream>
+#include <string>
+
+namespace sys {
+
+    /**
+    \brief Invalid command line argument error.
+    \ingroup exception
+    */
+    class bad_argument: public std::exception {
+
+    private:
+        const char* _arg;
+
+    public:
+
+        /// Construct error object for command line argument \p arg.
+        inline explicit
+        bad_argument(const char* arg):
+        std::exception(),
+        _arg(arg)
+        {}
+
+        /// Error message.
+        const char*
+        what() const noexcept override {
+            return "invalid argument";
+        }
+
+        /// Command line argument name.
+        inline const char*
+        argument() const noexcept {
+            return this->_arg;
+        }
+
+    };
+
+    /**
+    \brief
+    Command line argument encoded as \c key=value pair.
+    \date 2018-05-22
+    */
+    template <class T>
+    class key_value {
+
+    public:
+        /// Alias to \link std::string \endlink.
+        using key_type = std::string;
+        /// Alias to \c std::string::value_type.
+        using delimiter_type = std::string::value_type;
+
+    private:
+        key_type _key;
+        T& _value;
+        delimiter_type _delim;
+
+    public:
+
+        /**
+        Construct key-value pair with key \p key and reference to value \p value.
+        */
+        inline key_value(const key_type& key, T& value, delimiter_type delim='='):
+        _key(key), _value(value), _delim(delim) {}
+
+        /// Parse command line argument as key-value pair.
+        inline bool
+        operator()(int, const std::string& arg) {
+            bool success = false;
+            std::string::size_type eq_pos = arg.find(this->_delim);
+            if (eq_pos != std::string::npos) {
+                if (arg.compare(0, eq_pos, this->_key) == 0) {
+                    std::stringstream in(arg.substr(eq_pos+1));
+                    in >> this->_value;
+                    success = !in.fail();
+                }
+            }
+            return success;
+        }
+
+    };
+
+    /// Helper function to construct key-value pair.
+    template <class T>
+    key_value<T>
+    make_key_value(const std::string& key, T& value) {
+        return key_value<T>(key, value);
+    }
+
+    /**
+    \brief Ignores nought command line argument, which usually
+    equals executable name.
+    \details Fails on all other arguments.
+    */
+    struct ignore_first_argument {
+        /// \copydoc ignore_first_argument
+        inline bool
+        operator()(int pos, const std::string&) {
+            return pos == 0;
+        }
+    };
+
+    /// Function that parses command line argument.
+    typedef std::function<bool (int,const std::string&)>
+        input_operator_type;
+
+    /**
+    Parse command line arguments \p argv using provided \p input_operators.
+    */
+    void
+    parse_arguments(
+        int argc,
+        const char* argv[],
+        input_operator_type* input_operators
+    );
+
+    /**
+    Parse command line arguments \p argv using provided \p input_operators.
+    */
+    inline void
+    parse_arguments(
+        int argc,
+        char* argv[],
+        input_operator_type* input_operators
+    ) {
+        parse_arguments(argc, const_cast<const char**>(argv), input_operators);
+    }
+
+}
+
+#endif // vim:filetype=cpp

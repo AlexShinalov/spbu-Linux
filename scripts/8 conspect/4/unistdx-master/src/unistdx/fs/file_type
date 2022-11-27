@@ -1,0 +1,72 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_FS_FILE_TYPE
+#define UNISTDX_FS_FILE_TYPE
+
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#include <iosfwd>
+
+namespace sys {
+
+    typedef ::mode_t mode_type;
+
+    /// File types.
+    /// \ingroup fs
+    enum struct file_type: mode_type {
+        /// Regular file.
+        regular = S_IFREG,
+        /// A directory.
+        directory = S_IFDIR,
+        /// Block device.
+        block_device = S_IFBLK,
+        /// Character device.
+        character_device = S_IFCHR,
+        /// Named pipe.
+        /// \see \man{fifo,7}
+        pipe = S_IFIFO,
+        /// UNIX domain socket.
+        /// \see \man{unix,7}
+        socket = S_IFSOCK,
+        /// Symbolic link.
+        symbolic_link = S_IFLNK
+    };
+
+    /// Print file type as a character, as in \man{ls,1} command.
+    std::ostream&
+    operator<<(std::ostream& out, const file_type& rhs);
+
+}
+
+#endif // vim:filetype=cpp

@@ -1,0 +1,194 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2019, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_FS_ODIRECTORY
+#define UNISTDX_FS_ODIRECTORY
+
+#include <unistdx/fs/copy_file>
+#include <unistdx/fs/idirectory>
+#include <unistdx/fs/idirtree>
+#include <unistdx/it/basic_ostream_iterator>
+
+namespace sys {
+
+    /**
+    \brief Directory entry output stream.
+    \date 2018-05-25
+    \ingroup stream fs
+    \tparam Trans transformation function type
+    \see directory_entry
+    \see copy_file
+    \details
+    An output stream to which directory entries are written.
+    \arg Files are copied to output directory on insertion to the stream.
+    */
+    template<class Trans>
+    class basic_odirectory {
+
+    public:
+        /// File name transformation function type.
+        typedef Trans transform;
+
+    private:
+        path _dirpath;
+        transform _trans;
+
+    public:
+        basic_odirectory() = default;
+
+        ~basic_odirectory() = default;
+
+        /// Construct directory entry output stream for path \p dir.
+        inline explicit
+        basic_odirectory(path_view dir):
+        _dirpath(dir) {}
+
+        /// Copy-constructor.
+        basic_odirectory(const basic_odirectory&) = delete;
+
+        /// Move-constructor.
+        basic_odirectory(basic_odirectory&&) = default;
+
+        /// Set directory \p dir as output directory.
+        inline void
+        open(const path& dir) {
+            this->_dirpath = dir;
+        }
+
+        /// Get output directory path.
+        inline const path&
+        getpath() const noexcept {
+            return this->_dirpath;
+        }
+
+        /// Set file name transformation function.
+        inline void
+        settransform(transform rhs) {
+            this->_trans = rhs;
+        }
+
+        /// Get file name transformation function.
+        inline const transform&
+        gettransform() const noexcept {
+            return this->_trans;
+        }
+
+        /// Always returns true.
+        inline explicit
+        operator bool() const noexcept {
+            return true;
+        }
+
+        /// Always returns false.
+        inline bool
+        operator!() const noexcept {
+            return !this->operator bool();
+        }
+
+        /// Copy directory entry \p rhs to output directory of the stream.
+        inline basic_odirectory&
+        operator<<(const directory_entry& rhs) {
+            copy_file(
+                path(rhs.name()),
+                path(this->_dirpath, this->_trans(rhs))
+            );
+            return *this;
+        }
+
+        /// Copy all files in directory \p rhs to output directory of the stream.
+        template<class FilePred>
+        inline basic_odirectory&
+        operator<<(basic_idirectory<FilePred>& rhs) {
+            directory_entry ent;
+            while (rhs >> ent) {
+                path p(this->_dirpath, this->_trans(ent));
+                if (get_file_type(rhs.getpath(), ent) != sys::file_type::directory) {
+                    copy_file(path(rhs.getpath(), ent.name()), p);
+                } else {
+                    this->make_directory(p);
+                }
+            }
+            return *this;
+        }
+
+        /// Recursively copy whole directory \p rhs to output directory of the stream.
+        template<class X, class Y>
+        inline basic_odirectory&
+        operator<<(basic_idirtree<X,Y>& rhs) {
+            directory_entry ent;
+            while (rhs >> ent) {
+                path p(this->_dirpath, this->_trans(rhs.current_dir(), ent));
+                if (get_file_type(rhs.current_dir(), ent) != sys::file_type::directory) {
+                    copy_file(path(rhs.current_dir(), ent.name()), p);
+                } else {
+                    this->make_directory(p);
+                }
+            }
+            return *this;
+        }
+
+    private:
+
+        inline void
+        make_directory(const path& p) {
+            UNISTDX_CHECK(::mkdir(p, 0755));
+        }
+
+    };
+
+    /**
+    \brief Copy files without changing their names.
+    \details Default transformation function of directory entry output stream.
+    */
+    struct copy_verbatim {
+
+        /// Copy file name of directory \p rhs without changing it.
+        template<class Ent>
+        inline sys::path
+        operator()(const Ent& rhs) const {
+            return sys::path(rhs.name());
+        }
+
+    };
+
+    /// \brief Directory entry output stream that copies all files verbatim.
+    /// \ingroup fs
+    typedef basic_odirectory<copy_verbatim> odirectory;
+
+    /// \brief Directory entry output stream iterator.
+    /// \ingroup fs
+    template<class T>
+    using odirectory_iterator = basic_ostream_iterator<odirectory, T>;
+
+}
+
+#endif // vim:filetype=cpp

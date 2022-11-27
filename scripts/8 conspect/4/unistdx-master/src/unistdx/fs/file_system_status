@@ -1,0 +1,127 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_FS_FILE_SYSTEM_STATUS
+#define UNISTDX_FS_FILE_SYSTEM_STATUS
+
+#include <unistdx/base/string>
+#include <unistdx/config>
+#include <unistdx/io/fd_type>
+
+#if defined(UNISTDX_HAVE_STATVFS)
+#include <sys/statvfs.h>
+#endif
+
+namespace sys {
+
+    typedef struct ::statvfs file_system_status_type;
+
+    class file_system_status {
+
+    public:
+        using word_type = unsigned long;
+        using block_count_type = ::fsblkcnt_t;
+        using file_count_type = ::fsfilcnt_t;
+
+    public:
+        enum class mount_flags: unsigned long {
+            #if defined(ST_RDONLY)
+            read_only=ST_RDONLY,
+            #endif
+            #if defined(ST_NOSUID)
+            no_suid=ST_NOSUID,
+            #endif
+            #if defined(ST_NODEV)
+            no_devices=ST_NODEV,
+            #endif
+            #if defined(ST_NOEXEC)
+            no_executables=ST_NOEXEC,
+            #endif
+            #if defined(ST_SYNCHRONOUS)
+            synchronous=ST_SYNCHRONOUS,
+            #endif
+            #if defined(ST_MANDLOCK)
+            mandatory_lock=ST_MANDLOCK,
+            #endif
+            #if defined(ST_WRITE)
+            write=ST_WRITE,
+            #endif
+            #if defined(ST_APPEND)
+            append=ST_APPEND,
+            #endif
+            #if defined(ST_IMMUTABLE)
+            immutable=ST_IMMUTABLE,
+            #endif
+            #if defined(ST_NOATIME)
+            no_access_time=ST_NOATIME,
+            #endif
+            #if defined(ST_NODIRATIME)
+            no_directory_access_time=ST_NODIRATIME,
+            #endif
+            #if defined(ST_RELATIME)
+            relative_access_time=ST_RELATIME,
+            #endif
+        };
+
+
+    private:
+        file_system_status_type _stat{};
+
+    public:
+        inline explicit file_system_status(c_string path) {
+            UNISTDX_CHECK(::statvfs(path, &this->_stat));
+        }
+        inline explicit file_system_status(fd_type fd) {
+            UNISTDX_CHECK(::fstatvfs(fd, &this->_stat));
+        }
+
+        inline word_type block_size() const noexcept { return this->_stat.f_bsize; }
+        inline block_count_type total_blocks() const noexcept { return this->_stat.f_blocks; }
+        inline block_count_type free_blocks() const noexcept { return this->_stat.f_bfree; }
+        inline block_count_type available_blocks() const noexcept { return this->_stat.f_bavail; }
+        inline file_count_type total_inodes() const noexcept { return this->_stat.f_files; }
+        inline file_count_type free_inodes() const noexcept { return this->_stat.f_ffree; }
+        inline word_type max_name_size() const noexcept { return this->_stat.f_namemax; }
+        inline mount_flags flags() const noexcept { return mount_flags(this->_stat.f_flag); }
+
+        file_system_status() = default;
+        ~file_system_status() = default;
+        file_system_status(const file_system_status&) = default;
+        file_system_status& operator=(const file_system_status&) = default;
+        file_system_status(file_system_status&&) = default;
+        file_system_status& operator=(file_system_status&&) = default;
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

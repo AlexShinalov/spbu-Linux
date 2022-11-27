@@ -1,0 +1,197 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_NET_UNIX_SOCKET_ADDRESS
+#define UNISTDX_NET_UNIX_SOCKET_ADDRESS
+
+#include <sys/un.h>
+
+#include <unistdx/net/family>
+#include <unistdx/net/ipv6_address>
+
+namespace sys {
+
+    /// Socket address length type.
+    using socket_length_type = ::socklen_t;
+
+    /// Unix socket address type.
+    using unix_socket_address_type = ::sockaddr_un;
+
+    /**
+    \brief IPv4 socket address wrapper.
+    \date 2020-11-10
+    \ingroup wrapper net
+    */
+    class unix_socket_address {
+
+    private:
+        sockinet6_type _address{};
+
+    public:
+        /// Construct socket_address from unix socket path.
+        inline explicit unix_socket_address(const char* rhs) noexcept { path(rhs); }
+
+        inline unix_socket_address() noexcept {
+            this->_address.sin6_family = sa_family_type(socket_address_family::unix);
+        }
+
+        ~unix_socket_address() = default;
+        unix_socket_address(const unix_socket_address&) = default;
+        unix_socket_address& operator=(const unix_socket_address&) = default;
+        unix_socket_address(unix_socket_address&&) = default;
+        unix_socket_address& operator=(unix_socket_address&&) = default;
+
+        static constexpr inline socket_address_family family() noexcept { return socket_address_family::unix; }
+        static constexpr inline sa_family_type sa_family() noexcept { return sa_family_type(family()); }
+        inline void clear() { this->_address = {}; }
+
+        inline socket_length_type size() const noexcept {
+            return sizeof(sa_family_t) + path_length();
+        }
+
+        inline socket_address_type* get() noexcept { return reinterpret_cast<socket_address_type*>(&this->_address); }
+        inline socket_address_type* get() const noexcept { return const_cast<socket_address_type*>(reinterpret_cast<const socket_address_type*>(&this->_address)); }
+
+        inline bool operator<(const unix_socket_address& rhs) const noexcept {
+            using traits_type = std::char_traits<char>;
+            return traits_type::compare(
+                this->path(),
+                rhs.path(),
+                std::min(this->path_length(), rhs.path_length())
+            ) < 0;
+        }
+
+        inline bool operator<=(const unix_socket_address& rhs) const noexcept {
+            using traits_type = std::char_traits<char>;
+            return traits_type::compare(
+                this->path(),
+                rhs.path(),
+                std::min(this->path_length(), rhs.path_length())
+            ) <= 0;
+        }
+
+        inline bool operator>(const unix_socket_address& rhs) const noexcept {
+            using traits_type = std::char_traits<char>;
+            return traits_type::compare(
+                this->path(),
+                rhs.path(),
+                std::min(this->path_length(), rhs.path_length())
+            ) > 0;
+        }
+
+        inline bool operator>=(const unix_socket_address& rhs) const noexcept {
+            using traits_type = std::char_traits<char>;
+            return traits_type::compare(
+                this->path(),
+                rhs.path(),
+                std::min(this->path_length(), rhs.path_length())
+            ) >= 0;
+        }
+
+        inline bool operator==(const unix_socket_address& rhs) const noexcept {
+            using traits_type = std::char_traits<char>;
+            auto n = path_length();
+            return n == rhs.path_length() && traits_type::compare(path(), rhs.path(), n) == 0;
+        }
+
+        inline bool operator!=(const unix_socket_address& rhs) const noexcept {
+            return !this->operator==(rhs);
+        }
+
+        inline explicit operator bool() const noexcept { return path_length() != 0; }
+        inline bool operator!() const noexcept { return !this->operator bool(); }
+
+        friend std::ostream&
+        operator<<(std::ostream& out, const unix_socket_address& rhs);
+
+        friend std::istream&
+        operator>>(std::istream& in, unix_socket_address& rhs);
+
+        friend bstream&
+        operator<<(bstream& out, const unix_socket_address& rhs);
+
+        friend bstream&
+        operator>>(bstream& in, unix_socket_address& rhs);
+
+        friend struct std::hash<sys::unix_socket_address>;
+
+        inline const char* path() const noexcept {
+            return reinterpret_cast<const char*>(&this->_address) + sizeof(sa_family_t);
+        }
+
+        inline char* path() noexcept {
+            return reinterpret_cast<char*>(&this->_address) + sizeof(sa_family_t);
+        }
+
+        void path(const char* rhs) noexcept;
+
+        socket_length_type path_length() const noexcept;
+
+        inline static constexpr socket_length_type max_length() noexcept {
+            return sizeof(sockinet6_type) - sizeof(sa_family_t) - 1;
+        }
+
+    };
+
+    std::ostream&
+    operator<<(std::ostream& out, const unix_socket_address& rhs);
+
+    std::istream&
+    operator>>(std::istream& in, unix_socket_address& rhs);
+
+    bstream&
+    operator<<(bstream& out, const unix_socket_address& rhs);
+
+    bstream&
+    operator>>(bstream& in, unix_socket_address& rhs);
+
+}
+
+namespace std {
+
+    /// Specialisation of \link std::hash \endlink for \link sys::unix_socket_address \endlink.
+    template<>
+    struct hash<sys::unix_socket_address>: public hash<sys::socket_length_type> {
+
+        /**
+        \brief Computes hash of the address length.
+        */
+        inline size_t
+        operator()(const sys::unix_socket_address& rhs) const noexcept {
+            return this->hash<sys::socket_length_type>::operator()(rhs.path_length());
+        }
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

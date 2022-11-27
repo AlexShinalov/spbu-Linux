@@ -1,0 +1,94 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_IO_EVENT_FILE_DESCRIPTOR
+#define UNISTDX_IO_EVENT_FILE_DESCRIPTOR
+
+#include <unistdx/config>
+
+#if defined(UNISTDX_HAVE_EVENTFD)
+
+#include <sys/eventfd.h>
+
+#include <unistdx/base/types>
+#include <unistdx/io/fildes>
+
+namespace sys {
+
+    class event_file_descriptor: public fildes {
+
+    public:
+        using value_type = ::eventfd_t;
+
+        enum class flag: int {
+            semaphore=EFD_SEMAPHORE,
+            close_on_exec=EFD_CLOEXEC,
+            non_blocking=EFD_NONBLOCK,
+        };
+
+    public:
+
+        inline explicit
+        event_file_descriptor(unsigned int initial_value=0,
+                              flag flags=flag(EFD_CLOEXEC|EFD_NONBLOCK)):
+        fildes{check(::eventfd(initial_value, int(flags)))} {}
+
+        inline value_type read() {
+            value_type v{};
+            int ret = ::read(fd(), &v, sizeof(value_type));
+            if (ret != sizeof(value_type)) { UNISTDX_CHECK_IO(ret); }
+            return v;
+        }
+
+        inline void write(value_type v) {
+            int ret = ::write(fd(), &v, sizeof(value_type));
+            if (ret != sizeof(value_type)) { UNISTDX_CHECK_IO(ret); }
+        }
+
+        inline void notify_one() { write(1); }
+        inline void notify_all() { notify_one(); }
+        inline void wait() { read(); }
+
+        ~event_file_descriptor() = default;
+        event_file_descriptor(const event_file_descriptor&) = default;
+        event_file_descriptor& operator=(const event_file_descriptor&) = default;
+        event_file_descriptor(event_file_descriptor&&) = default;
+        event_file_descriptor& operator=(event_file_descriptor&&) = default;
+
+    };
+
+    UNISTDX_FLAGS(event_file_descriptor::flag);
+
+}
+#endif
+
+#endif // vim:filetype=cpp

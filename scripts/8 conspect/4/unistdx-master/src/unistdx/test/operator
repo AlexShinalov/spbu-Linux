@@ -1,0 +1,135 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020, 2021 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_TEST_OPERATOR
+#define UNISTDX_TEST_OPERATOR
+
+#include <unistdx/test/bstream_insert_extract>
+#include <unistdx/test/language>
+
+#include <iostream>
+#include <sstream>
+#include <string>
+
+namespace test {
+
+    template <class Stream=std::stringstream, class T> bool
+    io_operators(const T& expected) {
+        using namespace sys::test::lang;
+        T actual;
+        Stream s;
+        expect(s.good());
+        s << expected;
+        expect(s.good());
+        s >> actual;
+        expect(!s.fail());
+        return expect(value(expected) == value(actual));
+    }
+
+    template <class Stream=std::stringstream, class T> bool
+    stream_insert_extract(const T& expected) {
+        using namespace sys::test::lang;
+        T actual;
+        Stream s;
+        s << expected;
+        s >> actual;
+        return expect(value(expected) == value(actual));
+    }
+
+    template <class T>
+    inline std::string
+    stream_insert(const T& obj) {
+        std::stringstream str;
+        str << obj;
+        return str.str();
+    }
+
+    template <class T>
+    inline void
+    stream_insert_equals(const char* s, const T& obj) {
+        using namespace sys::test::lang;
+        expect(value(s) == value(stream_insert<T>(obj)));
+    }
+
+    template <class T>
+    inline void
+    stream_insert_contains(const char* s, const T& obj) {
+        using namespace sys::test::lang;
+        std::string str = stream_insert<T>(obj);
+        if (!expect(value(str.find(s)) != value(std::string::npos))) {
+            std::clog << "string=" << str;
+        }
+    }
+
+    template <class T>
+    inline void
+    stream_insert_starts_with(const char* s, const T& obj) {
+        using namespace sys::test::lang;
+        using t = std::string::traits_type;
+        auto actual = stream_insert<T>(obj);
+        if (!expect(value(0) == value(actual.compare(0, t::length(s), s)))) {
+            std::clog << "expected " << s << "\nactual " << actual;
+        }
+    }
+
+    template <class T> inline void
+    stream_extract(const std::string& string_representation, const T& expected_value) {
+        using namespace sys::test::lang;
+        std::stringstream tmp;
+        tmp << string_representation;
+        T actual_value{};
+        tmp >> actual_value;
+        expect(value(expected_value) == value(actual_value));
+    }
+
+    template <class T> inline T
+    stream_extract(const std::string& string_representation) {
+        using namespace sys::test::lang;
+        std::stringstream tmp;
+        tmp << string_representation;
+        T actual_value{};
+        tmp >> actual_value;
+        return actual_value;
+    }
+
+    template <class T>
+    void equality_and_hash(const T& a, const T& b) {
+        using namespace sys::test::lang;
+        std::hash<T> hash;
+        expect((value(a) == value(b)) ^ (value(a) != value(b)));
+        expect(imply(value(a) == value(b), value(hash(a)) == value(hash(b))));
+        expect(imply(value(hash(a)) != value(hash(b)), value(a) != value(b)));
+    }
+
+}
+
+#endif // vim:filetype=cpp

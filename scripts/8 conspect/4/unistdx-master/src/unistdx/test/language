@@ -1,0 +1,374 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2020, 2021 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_TEST_LANGUAGE
+#define UNISTDX_TEST_LANGUAGE
+
+#include <iostream>
+#include <set>
+#include <sstream>
+#include <typeinfo>
+#include <vector>
+
+#include <unistdx/system/error>
+#include <unistdx/test/arguments>
+#include <unistdx/test/properties>
+#include <unistdx/test/test_executor>
+
+namespace std {
+
+    template <>
+    struct iterator_traits<void*> {
+        using iterator_category = random_access_iterator_tag;
+        using value_type = void;
+        using difference_type = ptrdiff_t;
+        using pointer = void*;
+        using reference = void;
+    };
+
+    template <>
+    struct iterator_traits<const void*> {
+        using iterator_category = random_access_iterator_tag;
+        using value_type = void;
+        using difference_type = ptrdiff_t;
+        using pointer = const void*;
+        using reference = void;
+    };
+
+}
+
+namespace sys {
+    namespace test {
+
+        class Test;
+
+        namespace lang {
+
+            struct Expression {};
+
+            template <class E> inline
+            typename std::enable_if<std::is_base_of<Expression,E>::value,std::ostream&>::type
+            operator<<(std::ostream& out, const E& rhs) {
+                rhs.display(out); return out;
+            }
+
+            template <class E> inline
+            typename std::enable_if<std::is_enum<E>::value,std::ostream&>::type
+            operator<<(std::ostream& out, const E& rhs) {
+                using t = typename std::underlying_type<E>::type;
+                return out << static_cast<t>(rhs);
+            }
+
+            template <class E> inline
+            typename std::enable_if<
+            !std::is_pointer<E>::value &&
+            (std::is_base_of<std::input_iterator_tag,
+                typename std::iterator_traits<E>::iterator_category>::value ||
+            std::is_base_of<std::output_iterator_tag,
+                typename std::iterator_traits<E>::iterator_category>::value),
+                std::ostream&>::type
+            operator<<(std::ostream& out, const E& rhs) {
+                return out << "#iterator";
+            }
+
+            template <class E> inline std::ostream&
+            operator<<(std::ostream& out, const std::vector<E>& rhs) {
+                out << "(list ";
+                const auto n = rhs.size();
+                if (n != 0) { out << rhs.front(); }
+                for (size_t i=1; i<n; ++i) { out << ' ' << rhs[i]; }
+                out.put(')');
+                return out;
+            }
+
+            template <class E> inline std::ostream&
+            operator<<(std::ostream& out, const std::set<E>& rhs) {
+                out << "(list ";
+                auto first = rhs.begin(), last = rhs.end();
+                if (first != last) { out << *first; ++first; }
+                while (first != last) {
+                    out << ' ' << *first;
+                    ++first;
+                }
+                out.put(')');
+                return out;
+            }
+
+            inline std::ostream&
+            operator<<(std::ostream& out, std::nullptr_t) {
+                return out << "#nil";
+            }
+
+            template <class T>
+            struct Value: public Expression {
+                const T& value;
+                inline explicit Value(const T& v): value(v) {}
+                inline const T& evaluate() const { return value; }
+                inline void display(std::ostream& out) const { out << value; }
+            };
+
+            template <class T>
+            struct Reference: public Expression {
+                T& reference;
+                inline explicit Reference(T& r): reference(r) {}
+                inline const T& evaluate() const { return reference; }
+                inline void display(std::ostream& out) const { out << reference; }
+            };
+
+            template <class T>
+            struct Function: public Expression {
+                T func;
+                inline explicit Function(T f): func(std::move(f)) {}
+                inline decltype(func()) evaluate() const { return func(); }
+                inline void display(std::ostream& out) const { out << typeid(func).name(); }
+            };
+
+            template <class E>
+            struct No_throw: public Expression {
+                const E& arg0;
+                inline explicit No_throw(const E& e): arg0(e) {}
+                inline bool evaluate() const {
+                    try {
+                        arg0.evaluate();
+                        return true;
+                    } catch (const std::exception& err) {
+                        std::stringstream tmp;
+                        tmp << "Expect " << arg0 << " to not throw exception, but it throws: ";
+                        tmp << err.what();
+                        current_test->record_error(error(tmp.str()));
+                        return false;
+                    } catch (...) {
+                        std::stringstream tmp;
+                        tmp << "Expect " << arg0 << " to not throw exception, but it throws: ";
+                        tmp << "unknown exception";
+                        current_test->record_error(error(tmp.str()));
+                        return false;
+                    }
+                }
+                inline void display(std::ostream& out) const {
+                    out << "(no-throw " << arg0 << ")";
+                }
+            };
+
+            template <class E, class Error>
+            struct Throw: public Expression {
+                const E& arg0;
+                inline explicit Throw(const E& e): arg0(e) {}
+                inline bool evaluate() const {
+                    try {
+                        arg0.evaluate();
+                        std::stringstream tmp;
+                        tmp << "Expect " << arg0
+                            << " to throw exception, but it does not throw.";
+                        current_test->record_error(error(tmp.str()));
+                        return false;
+                    } catch (const Error& err) {
+                        return true;
+                    }
+                }
+                inline void display(std::ostream& out) const {
+                    out << "(throw " << arg0;
+                    out << typeid(Error).name();
+                    out << ")";
+                }
+            };
+
+            #define UNISTDX_INTERNAL_UNARY_OPERATOR(NAME,OP,TEXT) \
+                template <class E> \
+                struct NAME: public Expression { \
+                    const E& arg0; \
+                    inline explicit NAME(const E& e): arg0(e) {} \
+                    inline auto evaluate() const -> decltype(OP arg0.evaluate()) { \
+                        return OP arg0.evaluate(); \
+                    } \
+                    void display(std::ostream& out) const { \
+                        out << "(" TEXT " "; \
+                        arg0.display(out); \
+                        out.put(')'); \
+                    } \
+                }; \
+                template <class E> inline \
+                typename std::enable_if<std::is_base_of<Expression,E>::value,NAME<E>>::type \
+                operator OP(const E& e) { \
+                    return NAME<E>{e}; \
+                }
+
+            UNISTDX_INTERNAL_UNARY_OPERATOR(Not,!,"not");
+
+            #undef UNISTDX_INTERNAL_UNARY_OPERATOR
+
+            #define UNISTDX_INTERNAL_BINARY_OPERATOR(NAME,OP,TEXT) \
+                template <class A, class B> \
+                struct NAME: public Expression { \
+                    const A& arg0; \
+                    const B& arg1; \
+                    inline explicit NAME(const A& a, const B& b): arg0(a), arg1(b) {} \
+                    inline auto evaluate() const -> decltype(arg0.evaluate() OP arg1.evaluate()) { \
+                        return arg0.evaluate() OP arg1.evaluate(); \
+                    } \
+                    void display(std::ostream& out) const { \
+                        out << "(" TEXT " "; \
+                        arg0.display(out); \
+                        out.put(' '); \
+                        arg1.display(out); \
+                        out.put(')'); \
+                    } \
+                }; \
+                template <class A, class B> inline \
+                typename std::enable_if<std::is_base_of<Expression,A>::value && \
+                                        std::is_base_of<Expression,B>::value,NAME<A,B>>::type \
+                operator OP(const A& a, const B& b) { \
+                    return NAME<A,B>{a,b}; \
+                }
+
+            UNISTDX_INTERNAL_BINARY_OPERATOR(Equal,==,"=");
+            UNISTDX_INTERNAL_BINARY_OPERATOR(Not_equal,!=,"!=");
+            UNISTDX_INTERNAL_BINARY_OPERATOR(Less_than,<,"<");
+            UNISTDX_INTERNAL_BINARY_OPERATOR(Less_than_or_equal,<=,"<=");
+            UNISTDX_INTERNAL_BINARY_OPERATOR(Greater_than,>,">");
+            UNISTDX_INTERNAL_BINARY_OPERATOR(Greater_than_or_equal,>=,">=");
+            UNISTDX_INTERNAL_BINARY_OPERATOR(And,&&,"and");
+            UNISTDX_INTERNAL_BINARY_OPERATOR(Or,||,"or");
+            UNISTDX_INTERNAL_BINARY_OPERATOR(Xor,^,"xor");
+
+            #undef UNISTDX_INTERNAL_BINARY_OPERATOR
+
+            template <class A, class B>
+            struct Implication: public Expression {
+                const A& arg0;
+                const B& arg1;
+                inline explicit Implication(const A& a, const B& b): arg0(a), arg1(b) {}
+                inline auto evaluate() const -> decltype(!arg0.evaluate() || arg1.evaluate()) {
+                    return !arg0.evaluate() || arg1.evaluate();
+                }
+                void display(std::ostream& out) const {
+                    out << "(=> ";
+                    arg0.display(out);
+                    out.put(' ');
+                    arg1.display(out);
+                    out.put(')');
+                }
+            };
+
+            template <class A, class B> inline
+            typename std::enable_if<std::is_base_of<Expression,A>::value &&
+                                    std::is_base_of<Expression,B>::value,Implication<A,B>>::type
+            imply(const A& a, const B& b) {
+                return Implication<A,B>{a,b};
+            }
+
+            template <class E>
+            inline auto expect(const E& op)
+            -> typename std::enable_if<std::is_base_of<Expression,E>::value,bool>::type {
+                auto ret = op.evaluate();
+                if (!ret) {
+                    std::stringstream tmp;
+                    tmp << "Expect " << op << " to be true, but it is false.";
+                    current_test->record_error(error(tmp.str()));
+                }
+                return ret;
+            }
+
+            inline bool expect(bool b) {
+                if (!b) {
+                    std::stringstream tmp;
+                    tmp << "Expect " << b << " to be true, but it is false.";
+                    current_test->record_error(error(tmp.str()));
+                }
+                return b;
+            }
+
+            inline void fail(const std::string& message) {
+                current_test->record_error(error(message));
+            }
+
+            template <class T>
+            inline Value<T> value(const T& v) { return Value<T>{v}; }
+
+            template <class T>
+            inline Reference<T> reference(T& r) { return Reference<T>{r}; }
+
+            template <class T>
+            inline Function<T> call(T f) { return Function<T>{std::move(f)}; }
+
+            template <class E> inline
+            typename std::enable_if<std::is_base_of<Expression,E>::value,No_throw<E>>::type
+            no_throw(const E& e) { return No_throw<E>{e}; }
+
+            template <class E> inline
+            typename std::enable_if<std::is_base_of<Expression,E>::value,Throw<E,std::exception>>::type
+            throws(const E& e) { return Throw<E,std::exception>{e}; }
+
+            template <class Error,class E> inline
+            typename std::enable_if<std::is_base_of<Expression,E>::value,Throw<E,Error>>::type
+            throws(const E& e) { return Throw<E,Error>{e}; }
+
+            template <class Callback> inline void
+            for_each(Callback callback) { callback(); }
+
+            template <class Head, class ... Tail, class Callback> inline void
+            for_each(Head& variable, std::initializer_list<Head> values, Tail ... rest,
+                     Callback callback) {
+                for (auto& v : values) {
+                    variable = v;
+                    for_each(rest..., callback);
+                }
+            }
+
+            using sys::test::arguments;
+            using sys::test::random_engine;
+
+            template <class Head> inline void
+            do_tell(std::ostream& out, Head&& head) {
+                out << head;
+            }
+
+            template <class Head, class ... Tail> inline void
+            do_tell(std::ostream& out, Head&& head, Tail&& ... tail) {
+                out << head;
+                do_tell(out, std::forward<Tail>(tail)...);
+            }
+
+            template <class Head, class ... Tail> inline void
+            tell(std::ostream& out, Head&& head, Tail&& ... tail) {
+                std::stringstream tmp;
+                do_tell(tmp, std::forward<Head>(head), std::forward<Tail>(tail)...);
+                tmp << '\n';
+                out << tmp.str();
+                out.flush();
+            }
+
+        }
+    }
+}
+
+#endif // vim:filetype=cpp

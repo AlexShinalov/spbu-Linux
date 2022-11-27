@@ -1,0 +1,109 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_TEST_BASE
+#define UNISTDX_TEST_BASE
+
+#include <algorithm>
+#include <set>
+#include <string>
+#include <vector>
+
+#include <unistdx/test/language>
+#include <unistdx/test/tmpdir>
+
+namespace test {
+
+    template <class Stream, class Iterator>
+    void
+    test_file_list(
+        const tmpdir& tdir,
+        const std::vector<std::string>& files
+    ) {
+        using namespace sys::test::lang;
+        Stream dir(tdir);
+        std::set<std::string> files_orig(files.begin(), files.end());
+        std::set<std::string> files_actual;
+        std::for_each(
+            Iterator(dir),
+            Iterator(),
+            [&files_actual] (const sys::directory_entry& ent) {
+                files_actual.emplace(ent.name());
+            }
+        );
+        if (!expect(value(files_orig) == value(files_actual))) {
+            std::clog << "bad file list in " << tdir.name();
+        }
+    }
+
+    template <class Stream, class Iterator>
+    void
+    test_file_count(
+        const test::tmpdir& tdir,
+        const std::vector<std::string>& files
+    ) {
+        using namespace sys::test::lang;
+        Stream dir(tdir);
+        size_t cnt = std::distance(Iterator(dir), Iterator());
+        if (!expect(value(cnt) == value(files.size()))) {
+            std::clog << "bad total file count in " << tdir.name();
+        }
+    }
+
+    template <class Stream>
+    inline void
+    assert_good(const Stream& dir, bool is_open) {
+        using namespace sys::test::lang;
+        expect(value(dir.is_open()) == value(is_open));
+        expect(value(dir.good()) == value(true));
+        expect(value(dir.bad()) == value(false));
+        expect(value(dir.eof()) == value(false));
+        expect(value(static_cast<bool>(dir)) == value(true));
+    }
+
+    template <class Stream>
+    inline void
+    test_open_close(Stream& dir, const test::tmpdir& tdir) {
+        assert_good(dir, false);
+        dir.open(tdir);
+        assert_good(dir, true);
+        dir.open(tdir);
+        assert_good(dir, true);
+        dir.close();
+        assert_good(dir, false);
+        dir.close();
+        assert_good(dir, false);
+    }
+
+}
+
+#endif // vim:filetype=cpp

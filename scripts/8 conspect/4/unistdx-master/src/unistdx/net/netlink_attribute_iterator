@@ -1,0 +1,176 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_NET_NETLINK_ATTRIBUTE_ITERATOR
+#define UNISTDX_NET_NETLINK_ATTRIBUTE_ITERATOR
+
+#include <iterator>
+
+#include <unistdx/base/contracts>
+
+namespace sys {
+
+    /**
+    \brief Iterator for netlink message attributes.
+    \date 2018-05-25
+    \ingroup iter net
+    */
+    template <class T>
+    class netlink_attribute_iterator:
+        public std::iterator<std::input_iterator_tag, T> {
+
+    private:
+        typedef T attr_type;
+        typedef typename std::iterator<std::input_iterator_tag, T> base_type;
+
+    public:
+        using typename base_type::iterator_category;
+        using typename base_type::value_type;
+        using typename base_type::pointer;
+        using typename base_type::reference;
+        using typename base_type::difference_type;
+
+    private:
+        typedef const value_type* const_pointer;
+        typedef const value_type& const_reference;
+
+    private:
+        attr_type* _attr = nullptr;
+        int _len = 0;
+
+    public:
+
+        /// Construct netlink iterator from message pointer \p rhs.
+        inline explicit
+        netlink_attribute_iterator(attr_type* rhs, int len):
+        _attr(rhs),
+        _len(len) {
+            // LCOV_EXCL_START
+            UNISTDX_PRECONDITION(rhs != nullptr);
+            UNISTDX_PRECONDITION(len >= 0);
+            // LCOV_EXCL_STOP
+        }
+
+        netlink_attribute_iterator() = default;
+
+        inline
+        ~netlink_attribute_iterator() = default;
+
+        /// Copy-constructor.
+        netlink_attribute_iterator(const netlink_attribute_iterator&) = default;
+
+        /// Assignment.
+        inline netlink_attribute_iterator&
+        operator=(const netlink_attribute_iterator&) noexcept = default;
+
+        /// Compare pointers.
+        inline constexpr bool
+        operator==(const netlink_attribute_iterator& rhs) const noexcept {
+            return this->_attr == rhs._attr;
+        }
+
+        /// Compare pointers.
+        inline constexpr bool
+        operator!=(const netlink_attribute_iterator& rhs) const noexcept {
+            return !this->operator==(rhs);
+        }
+
+        /// Dereference.
+        inline reference
+        operator*() noexcept {
+            return *this->_attr;
+        }
+
+        /// Dereference.
+        inline constexpr const_reference
+        operator*() const noexcept {
+            return *this->_attr;
+        }
+
+        /// Access object by pointer.
+        inline pointer
+        operator->() noexcept {
+            return this->_attr;
+        }
+
+        /// Access object by pointer.
+        inline constexpr const_pointer
+        operator->() const noexcept {
+            return this->_attr;
+        }
+
+        /// Increment.
+        inline netlink_attribute_iterator&
+        operator++() UNISTDX_NOEXCEPT {
+            this->do_next();
+            return *this;
+        }
+
+        /// Post-increment.
+        inline netlink_attribute_iterator
+        operator++(int) UNISTDX_NOEXCEPT {
+            netlink_attribute_iterator tmp(*this);
+            this->do_next();
+            return tmp;
+        }
+
+    private:
+
+        inline bool
+        ok() const noexcept {
+            return this->_attr->ok(this->_len);
+        }
+
+        inline bool
+        done() const noexcept {
+            return this->_attr->done();
+        }
+
+        inline value_type*
+        next() noexcept {
+            return static_cast<value_type*>(this->_attr->next(this->_len));
+        }
+
+        inline void
+        do_next() UNISTDX_NOEXCEPT {
+            UNISTDX_ASSERTION(this->_attr);
+            this->_attr = this->next();
+            if (!this->ok()) {
+                this->_attr = nullptr;
+            }
+        }
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

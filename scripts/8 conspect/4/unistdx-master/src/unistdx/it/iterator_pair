@@ -1,0 +1,107 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_IT_ITERATOR_PAIR
+#define UNISTDX_IT_ITERATOR_PAIR
+
+#include <type_traits>
+
+namespace sys {
+
+    /**
+    \brief Container interface for two iterators.
+    \date 2018-05-25
+    \ingroup container
+    The container stores two iterators and provides begin/end methods.
+    */
+    template <class T>
+    class iterator_pair {
+
+    public:
+        /// Iterator type.
+        typedef T iterator;
+        /// Value type.
+        typedef typename iterator::value_type value_type;
+        /// Reference type.
+        typedef typename iterator::reference reference;
+        /// Difference type.
+        typedef typename iterator::difference_type difference_type;
+        /// Size type.
+        typedef typename std::make_signed<typename iterator::difference_type>::type
+            size_type;
+        /// Constant reference type.
+        typedef typename std::add_const<typename iterator::reference>::type
+            const_reference;
+
+    private:
+        iterator _first;
+        iterator _last;
+
+    public:
+
+        /// Construct iterator pair from \p first and \p last.
+        inline
+        iterator_pair(iterator first, iterator last) noexcept:
+        _first(first),
+        _last(last)
+        {}
+
+        /// Move-constructor.
+        iterator_pair(iterator_pair&&) = default;
+
+        /// Copy-constructor.
+        iterator_pair(const iterator_pair&) = default;
+
+        /// Returns iterator to the beginning of attribute sequence.
+        inline iterator
+        begin() noexcept {
+            return this->_first;
+        }
+
+        /// Returns iterator to the end of attribute sequence.
+        inline iterator
+        end() noexcept {
+            return this->_last;
+        }
+
+    };
+
+    /// Construct iterator pair from \p first and \p last.
+    template <class T>
+    inline iterator_pair<T>
+    make_view(T first, T last) noexcept {
+        return iterator_pair<T>(first, last);
+    }
+
+}
+
+#endif // vim:filetype=cpp

@@ -1,0 +1,282 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_FS_CANONICAL_PATH
+#define UNISTDX_FS_CANONICAL_PATH
+
+#include <limits.h>
+#include <stdlib.h>
+
+#include <unistdx/base/check>
+#include <unistdx/fs/path>
+
+namespace sys {
+
+    /**
+    \brief Make path \p rhs canonical.
+    \return canonical path as a unique pointer to character array
+    \throws bad_call
+    \see \man{realpath,3}
+    */
+    inline std::unique_ptr<char[]>
+    make_canonical(const char* rhs) {
+        std::unique_ptr<char[]> ptr(new char[PATH_MAX]);
+        UNISTDX_CHECK2(::realpath(rhs, ptr.get()), nullptr);
+        return ptr;
+    }
+
+    /// \copydoc make_canonical(const char*)
+    template <class T>
+    inline std::unique_ptr<char[]>
+    make_canonical(path&& rhs) {
+        return make_canonical(static_cast<const char*>(rhs));
+    }
+
+    /// \copydoc make_canonical(const char*)
+    template <class T>
+    inline std::unique_ptr<char[]>
+    make_canonical(const path& rhs) {
+        return make_canonical(static_cast<const char*>(rhs));
+    }
+
+    /// \copydoc make_canonical(const char*)
+    template <class Ch, class Tr, class Alloc>
+    inline std::unique_ptr<char[]>
+    make_canonical(const std::basic_string<Ch,Tr,Alloc>& rhs) {
+        return make_canonical(rhs.data());
+    }
+
+    /// \copydoc make_canonical(const char*)
+    template <class Ch, class Tr, class Alloc>
+    inline std::unique_ptr<char[]>
+    make_canonical(std::basic_string<Ch,Tr,Alloc>&& rhs) {
+        return make_canonical(rhs.data());
+    }
+
+    /**
+    \brief Canonical path that is always absolute and real.
+    \date 2018-05-25
+    \ingroup fs
+    \tparam Ch character type
+    \tparam Tr character traits type
+    \tparam Alloc allocator type
+    \details
+    Canonical path is a path that
+    \arg contains no special directories "." and "..",
+    \arg contains only one separator per component,
+    \arg contains no symbolic links.
+    */
+    template <class Ch, class Tr=std::char_traits<Ch>, class Alloc=
+                  std::allocator<Ch>>
+    class basic_canonical_path: public basic_path<Ch,Tr,Alloc> {
+
+    public:
+        /// Non-canonical path type.
+        typedef basic_path<Ch,Tr,Alloc> path_type;
+        using typename path_type::value_type;
+        using typename path_type::traits_type;
+        using typename path_type::allocator_type;
+        using typename path_type::reference;
+        using typename path_type::const_reference;
+        using typename path_type::pointer;
+        using typename path_type::const_pointer;
+        using typename path_type::iterator;
+        using typename path_type::const_iterator;
+        using typename path_type::reverse_iterator;
+        using typename path_type::const_reverse_iterator;
+        using typename path_type::difference_type;
+        using typename path_type::size_type;
+        using typename path_type::string_type;
+
+    public:
+
+        friend struct std::hash<basic_canonical_path>;
+
+        inline
+        basic_canonical_path() = default;
+
+        /// Construct path from directory \p dir and file \p filename.
+        template <class A, class B>
+        basic_canonical_path(A&& dir, B&& filename):
+        path_type(make_canonical(path_type(std::forward<A>(dir),
+                                           std::forward<B>(filename))))
+        {}
+
+        /// Move-constructor.
+        inline
+        basic_canonical_path(basic_canonical_path&& rhs):
+        path_type(std::forward<path_type>(rhs))
+        {}
+
+        /// Copy-constructor.
+        inline
+        basic_canonical_path(const basic_canonical_path& rhs):
+        path_type(rhs)
+        {}
+
+        /// Move-constructor for string.
+        inline explicit
+        basic_canonical_path(string_type&& rhs):
+        path_type(make_canonical(std::forward<string_type>(rhs)))
+        {}
+
+        /// Copy-constructor for string.
+        inline explicit
+        basic_canonical_path(const string_type& rhs):
+        path_type(make_canonical(rhs))
+        {}
+
+        /// Copy-constructor for path.
+        inline explicit
+        basic_canonical_path(const path_type& rhs):
+        path_type(make_canonical(rhs.data()))
+        {}
+
+        /// Move-constructor for path.
+        inline explicit
+        basic_canonical_path(path_type&& rhs):
+        path_type(make_canonical(std::forward<path_type>(rhs)))
+        {}
+
+        /// Constructor for <code>const char*</code>.
+        inline explicit
+        basic_canonical_path(const char* rhs):
+        path_type(make_canonical(rhs))
+        {}
+
+        /// Move-assignment.
+        inline basic_canonical_path&
+        operator=(basic_canonical_path&&) = default;
+
+        /// Copy-assignment.
+        inline basic_canonical_path&
+        operator=(const basic_canonical_path&) = default;
+
+        /// Returns the last path component.
+        inline path_type
+        basename() const {
+            const size_t pos = this->find_last_of(file_separator);
+            return (pos == std::string::npos)
+                   ? path_type(*this)
+                   : (pos == 0)
+                   ? path_type("/")
+                   : path_type(std::move(this->substr(pos+1)));
+        }
+
+        /// Returns all path components except the last.
+        inline basic_canonical_path
+        dirname() const {
+            const size_t pos = this->find_last_of(file_separator);
+            return (pos == std::string::npos)
+                   ? *this
+                   : (pos == 0)
+                   ? basic_canonical_path("/")
+                   : basic_canonical_path(std::move(this->substr(0, pos)));
+        }
+
+        /// Returns true, if this canonical path is relative to directory \p root.
+        inline bool
+        is_relative_to(const basic_canonical_path& root) {
+            return this->compare(0, root.size(), root) == 0;
+        }
+
+        /// Swap with \p rhs.
+        inline void
+        swap(basic_canonical_path& rhs) {
+            std::swap(
+                static_cast<string_type&>(*this),
+                static_cast<string_type&>(rhs)
+            );
+        }
+
+    };
+
+    /// Overload of \link std::swap \endlink for \link basic_canonical_path \endlink.
+    template <class Ch, class Tr, class Alloc>
+    inline void
+    swap(
+        basic_canonical_path<Ch, Tr, Alloc>& lhs,
+        basic_canonical_path<Ch, Tr, Alloc>& rhs
+    ) {
+        lhs.swap(rhs);
+    }
+
+    /**
+    \brief
+    Specialisation of \link basic_canonical_path \endlink for char.
+    \ingroup fs
+    */
+    typedef basic_canonical_path<char> canonical_path;
+
+    namespace this_process {
+
+        /**
+        \brief
+        Get canonical path to the working directory of the calling process.
+        \ingroup fs
+        */
+        inline sys::canonical_path
+        workdir() {
+            return sys::canonical_path(".");
+        }
+
+    }
+
+}
+
+namespace std {
+
+    /// Specialisation of \link std::hash \endlink for \link sys::basic_canonical_path \endlink.
+    template <class Ch, class Tr, class Alloc>
+    struct hash<sys::basic_canonical_path<Ch,Tr,Alloc>>:
+        public std::hash<std::basic_string<Ch,Tr,Alloc>> {
+
+    private:
+        typedef std::hash<std::basic_string<Ch,Tr,Alloc>> base_type;
+
+    public:
+        /// Hash function return value type.
+        typedef size_t result_type;
+        /// Hash function argument type.
+        typedef sys::basic_canonical_path<Ch,Tr,Alloc> argument_type;
+
+        /// Return string hash of path.
+        inline result_type
+        operator()(const argument_type& rhs) const noexcept {
+            return this->base_type::operator()(rhs);
+        }
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

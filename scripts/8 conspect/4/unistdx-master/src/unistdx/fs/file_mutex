@@ -1,0 +1,136 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_FS_FILE_MUTEX
+#define UNISTDX_FS_FILE_MUTEX
+
+#include <fcntl.h>
+#include <sys/file.h>
+
+#include <exception>
+
+#include <unistdx/bits/no_copy_and_move>
+#include <unistdx/io/fildes>
+
+namespace sys {
+
+    /// File lock types.
+    enum struct file_lock_type: int {
+        /// Shared read lock.
+        read_lock = LOCK_SH,
+        /// Exclusive write lock.
+        write_lock = LOCK_EX
+    };
+
+    /**
+    \brief File-based mutex.
+    \date 2018-05-21
+    \ingroup mutex fs
+    \see \man{flock,2}
+    \details
+    \arg Uses the sanest (but not very portable) \man{flock,2}
+    system call for file locking.
+    \arg Read locks may be acquired by multiple processes, provided
+    that there no write lock on the file.
+    \arg Write lock may be acquired by only one process.
+    */
+    class file_mutex: public fildes {
+
+    public:
+
+        using fildes::open;
+
+        /// Acquire file lock of type \p tp.
+        inline void
+        lock(file_lock_type tp=file_lock_type::write_lock) {
+            this->do_lock(int(tp));
+        }
+
+        /// Release file lock.
+        inline void
+        unlock() {
+            this->do_lock(LOCK_UN);
+        }
+
+        /// Try to acquire file lock of type \p tp.
+        bool
+        try_lock(file_lock_type tp=file_lock_type::write_lock);
+
+        file_mutex() noexcept = default;
+
+        /**
+        Construct file mutex with file \p filename, flags \p flags,
+        file mode \p mode.
+        */
+        inline
+        file_mutex(
+            const char* filename,
+            open_flag flags,
+            mode_type mode
+        ) noexcept:
+        fildes() {
+            this->open(filename, flags, mode);
+        }
+
+        /**
+        Construct file mutex with file \p filename, read-write permissions,
+        file mode \p mode.
+        */
+        inline
+        file_mutex(const char* filename, mode_type mode) noexcept:
+        fildes() {
+            this->open(filename, mode);
+        }
+
+        /**
+        Open file \p filename for mutex with read-write permissions and
+        file mode \p mode.
+        */
+        inline void
+        open(const char* filename, mode_type mode) noexcept {
+            this->open(filename, open_flag::read_write|open_flag::create, mode);
+        }
+
+        UNISTDX_NO_COPY_AND_MOVE(file_mutex)
+
+    private:
+
+        inline void
+        do_lock(int cmd) {
+            UNISTDX_CHECK(::flock(this->_fd, cmd));
+        }
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

@@ -1,0 +1,249 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_BASE_WEBSOCKETBUF
+#define UNISTDX_BASE_WEBSOCKETBUF
+
+#include <streambuf>
+#include <string>
+#include <unordered_map>
+#if !defined(NDEBUG) && defined(UNISTDX_DEBUG_WEBSOCKETBUF)
+#include <unistdx/base/log_message>
+#endif
+#include <unistdx/base/packetbuf>
+#include <unistdx/base/websocket>
+
+namespace sys {
+
+    /**
+    \brief
+    Stream buffer that encodes/decodes its contents using WebSocket protocol.
+    \date 2018-05-22
+    \ingroup streambuf
+    \see websocket_frame
+    \see \rfc{6455}
+    \details
+    The implementation
+    \arg supports only the latest WebSocket standard,
+    \arg supports only binary frames,
+    \arg supports only binary WebSocket protocol,
+    \arg does not perform closing handshake,
+    \arg always masks payloads,
+    \arg uses secure random device for key generation and masking.
+    */
+    template<class Ch, class Tr=std::char_traits<Ch> >
+    class basic_websocketbuf: public virtual basic_packetbuf<Ch,Tr> {
+
+    public:
+        using typename std::basic_streambuf<Ch,Tr>::pos_type;
+        using typename std::basic_streambuf<Ch,Tr>::off_type;
+        using typename std::basic_streambuf<Ch,Tr>::char_type;
+        using typename std::basic_streambuf<Ch,Tr>::traits_type;
+
+        /// The role of this stream buffer.
+        enum struct role_type {
+            server,
+            client
+        };
+
+    private:
+
+        enum struct server_state {
+            initial,
+            parsing_http_method,
+            parsing_http_headers,
+            validating_headers,
+            writing_handshake,
+            end,
+        };
+
+        enum struct client_state {
+            initial,
+            writing_handshake,
+            parsing_http_status,
+            parsing_http_headers,
+            validating_headers,
+            end
+        };
+
+        typedef std::unordered_map<std::string, std::string> map_type;
+
+    private:
+        client_state _cstate = client_state::initial;
+        server_state _sstate = server_state::initial;
+        role_type _role = role_type::server;
+        map_type _headers;
+        bool _valid = true;
+        websocket_frame _iframe;
+
+    public:
+
+        /// Set stream buffer role.
+        inline void
+        role(role_type r) noexcept {
+            this->_role = r;
+        }
+
+        /// Get stream buffer role.
+        inline role_type
+        role() const noexcept {
+            return this->_role;
+        }
+
+        /// Perform WebSocket opening handshake.
+        inline bool
+        handshake() override {
+            return (this->_role == role_type::server)
+                   ? this->server_handshake()
+                   : this->client_handshake();
+        }
+
+        /// Perform server WebSocket opening handshake.
+        bool
+        server_handshake();
+
+        /// Perform client WebSocket opening handshake.
+        bool
+        client_handshake();
+
+    private:
+
+        void
+        put_header() override;
+
+        std::streamsize
+        overwrite_header(std::streamsize n) override;
+
+        virtual bool
+        xgetheader(
+            std::streamsize& header_size,
+            std::streamsize& payload_size
+        ) override;
+
+        void
+        on_payload() override;
+
+        void
+        initiate_handshake();
+
+        void
+        write_handshake();
+
+        void
+        put_websocket_key();
+
+        void
+        put_websocket_accept_header();
+
+        void
+        parse_http_status();
+
+        void
+        parse_http_method();
+
+        void
+        parse_http_headers();
+
+        void
+        validate_http_headers();
+
+        inline bool
+        has_header(const std::string& key) {
+            return this->_headers.find(key) != this->_headers.end();
+        }
+
+        inline bool
+        has_header(const std::string& key, const std::string& value) {
+            auto result = this->_headers.find(key);
+            return result != this->_headers.end() && result->second == value;
+        }
+
+        inline bool
+        has_header_containing(const std::string& key, const std::string& value) {
+            auto result = this->_headers.find(key);
+            return result != this->_headers.end() &&
+                result->second.find(value) != std::string::npos;
+        }
+
+        inline void
+        ensure_header(const std::string& key) {
+            if (!this->has_header(key)) {
+                throw 11; // LCOV_EXCL_LINE
+            }
+        }
+
+        inline void
+        ensure_header(const std::string& key, const std::string& value) {
+            if (!this->has_header(key, value)) {
+                throw 22;
+            }
+        }
+
+        inline void
+        ensure_header_contains(const std::string& key, const std::string& value) {
+            if (!this->has_header_containing(key, value)) {
+                throw 33;
+            }
+        }
+
+        #if !defined(NDEBUG) && defined(UNISTDX_DEBUG_WEBSOCKETBUF)
+        void
+        setstate(server_state s);
+
+        #else
+        inline void
+        setstate(server_state s) noexcept {
+            this->_sstate = s;
+        }
+
+        #endif
+
+        #if !defined(NDEBUG) && defined(UNISTDX_DEBUG_WEBSOCKETBUF)
+        void
+        setstate(client_state s);
+
+        #else
+        inline void
+        setstate(client_state s) noexcept {
+            this->_cstate = s;
+        }
+
+        #endif
+
+        char_type*
+        find_the_end_of_the_line() noexcept;
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

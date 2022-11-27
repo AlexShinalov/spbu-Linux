@@ -1,0 +1,305 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2020, 2021 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_BASE_STRING
+#define UNISTDX_BASE_STRING
+
+#include <cstring>
+#include <ostream>
+#include <string>
+
+#include <unistdx/base/array_view>
+
+namespace sys {
+
+    /// \brief Immutable string with unknown size.
+    class c_string {
+
+    public:
+        using pointer = char*;
+        using const_pointer = const char*;
+        using reference = char&;
+        using const_reference = const char&;
+        using size_type = size_t;
+
+    private:
+        const_pointer _data{};
+
+    public:
+        c_string() noexcept = default;
+        ~c_string() noexcept = default;
+        c_string(const c_string&) = default;
+        c_string& operator=(const c_string&) = default;
+
+        inline
+        c_string(const_pointer data) noexcept:
+        _data(data) {}
+
+        template <class Tr, class Alloc> inline
+        c_string(const std::basic_string<char,Tr,Alloc>& str) noexcept:
+        _data(str.data()) {}
+
+        inline c_string(c_string&& rhs) noexcept: _data(rhs._data) { rhs._data = nullptr; }
+
+        inline c_string& operator=(c_string&& rhs) noexcept {
+            this->_data = rhs._data;
+            rhs._data = nullptr;
+            return *this;
+        }
+
+        inline const_pointer data() const noexcept { return this->_data; }
+        inline operator const_pointer() const noexcept { return this->_data; }
+        inline const_reference front() const noexcept { return *this->_data; }
+
+        inline size_type size() const noexcept {
+            return std::char_traits<char>::length(data());
+        }
+
+        inline const_pointer find(char ch) const {
+            return std::strchr(this->_data, ch);
+        }
+
+        inline const_pointer find_last(char ch) const {
+            return std::strrchr(this->_data, ch);
+        }
+
+        inline void trim_left() noexcept {
+            while (std::isspace(*this->_data)) { ++this->_data; }
+        }
+
+        inline bool operator==(const c_string& rhs) const noexcept {
+            return std::strcmp(data(), rhs.data()) == 0;
+        }
+
+        inline bool operator!=(const c_string& rhs) const noexcept {
+            return !this->operator==(rhs);
+        }
+
+        inline bool operator<(const c_string& rhs) const noexcept {
+            return std::strcmp(data(), rhs.data()) < 0;
+        }
+
+        inline bool operator<=(const c_string& rhs) const noexcept {
+            return std::strcmp(data(), rhs.data()) <= 0;
+        }
+
+        inline bool operator>(const c_string& rhs) const noexcept {
+            return std::strcmp(data(), rhs.data()) > 0;
+        }
+
+        inline bool operator>=(const c_string& rhs) const noexcept {
+            return std::strcmp(data(), rhs.data()) >= 0;
+        }
+
+        inline const_reference operator[](size_type i) const noexcept { return this->_data[i]; }
+
+    };
+
+    /*
+    inline bool operator==(const c_string& lhs, const char* rhs) noexcept {
+        return std::strcmp(lhs.data(), rhs) == 0;
+    }
+
+    inline bool operator!=(const c_string& lhs, const char* rhs) noexcept {
+        return !operator==(lhs,rhs);
+    }
+
+    inline bool operator==(const char* lhs, const c_string& rhs) noexcept {
+        return std::strcmp(lhs, rhs.data()) == 0;
+    }
+
+    inline bool operator!=(const char* lhs, const c_string& rhs) noexcept {
+        return !operator==(lhs,rhs);
+    }
+    */
+
+    inline std::ostream& operator<<(std::ostream& out, const c_string& rhs) {
+        return out << rhs.data();
+    }
+
+    /// \brief Immutable string with known size.
+    class const_string {
+
+    public:
+        using pointer = char*;
+        using const_pointer = const char*;
+        using size_type = size_t;
+
+    private:
+        const_pointer _data{};
+        size_type _size{};
+
+    public:
+        const_string() noexcept = default;
+
+        inline constexpr
+        const_string(const_pointer data, size_type size) noexcept:
+        _data(data), _size(size) {}
+
+        /*
+        inline
+        const_string(const_pointer data) noexcept:
+        const_string(data, std::char_traits<char>::length(data)) {}
+        */
+
+        template <class Tr, class Alloc> inline
+        const_string(const std::basic_string<char,Tr,Alloc>& str) noexcept:
+        const_string(str.data(), str.size()) {}
+
+        template <size_t N> constexpr inline
+        const_string(const char (&data)[N]) noexcept:
+        const_string(data, N-1) {}
+
+        inline const_pointer data() const noexcept { return this->_data; }
+        inline operator const_pointer() const noexcept { return this->_data; }
+        inline size_type size() const noexcept { return this->_size; }
+        inline const_pointer begin() const noexcept { return data(); }
+        inline const_pointer end() const noexcept { return data()+size(); }
+
+    };
+
+    /// \brief Mutable string with known capacity.
+    // Uses realloc for resize and does not fill contents with noughts.
+    class string {
+
+    public:
+        using pointer = char*;
+        using const_pointer = const char*;
+        using reference = char&;
+        using const_reference = const char&;
+        using size_type = size_t;
+
+    private:
+        pointer _data{};
+        size_type _capacity{};
+
+    public:
+        string() noexcept = default;
+        inline ~string() noexcept { deallocate(); }
+        inline explicit string(size_type size): _data(allocate(size)), _capacity(size) {}
+
+        inline string(string&& rhs) noexcept: _data(rhs._data), _capacity(rhs._capacity) {
+            rhs._data = nullptr;
+        }
+
+        inline string& operator=(string&& rhs) noexcept { swap(rhs); return *this; }
+
+        inline void swap(string& rhs) noexcept {
+            std::swap(this->_data, rhs._data);
+            std::swap(this->_capacity, rhs._capacity);
+        }
+
+        inline string(const string& rhs): string(rhs._capacity) {
+            std::strncpy(this->_data, rhs, this->_capacity);
+        }
+
+        inline explicit string(const_pointer s, size_type n):
+        _data(allocate(n)), _capacity(n) {
+            std::strncpy(this->_data, s, this->_capacity);
+        }
+
+        inline explicit string(const_pointer s):
+        string(s, std::char_traits<char>::length(s)) {}
+
+        inline string& operator=(const string& rhs) {
+            string tmp(rhs);
+            swap(tmp);
+            return *this;
+        }
+
+        inline void capacity(size_type size) {
+            this->_capacity = size;
+            this->_data = static_cast<pointer>(::realloc(this->_data, this->_capacity));
+        }
+
+        inline const_pointer data() const noexcept { return this->_data; }
+        inline void data(pointer rhs) noexcept { this->_data = rhs; }
+        inline operator const_pointer() const noexcept { return this->_data; }
+        inline operator pointer() noexcept { return this->_data; }
+        inline size_type capacity() const noexcept { return this->_capacity; }
+        inline const_pointer begin() const noexcept { return data(); }
+        inline const_pointer end() const noexcept { return data()+capacity(); }
+        //inline const_reference operator[](size_type i) const noexcept { return this->_data[i]; }
+        inline pointer data() noexcept { return this->_data; }
+        inline pointer begin() noexcept { return data(); }
+        inline pointer end() noexcept { return data()+capacity(); }
+        //inline reference operator[](size_type i) noexcept { return this->_data[i]; }
+        inline size_type size() const noexcept { return std::char_traits<char>::length(data()); }
+
+    private:
+        inline static pointer allocate(size_type n) {
+            auto ret = ::malloc(n);
+            if (!ret) { throw std::bad_alloc(); }
+            return static_cast<pointer>(ret);
+        }
+
+        inline void deallocate() { ::free(this->_data); }
+
+    };
+
+    inline std::ostream& operator<<(std::ostream& out, const string& rhs) { return out << rhs.data(); }
+
+    class c_string_array_view: public array_view<char*> {
+
+    public:
+        inline explicit c_string_array_view(value_type* data) noexcept:
+        array_view<char*>{data, count(data)} {}
+
+        inline c_string_array_view(value_type* data, size_type size) noexcept:
+        array_view<char*>{data, size} {}
+
+        inline char** argv() noexcept { return data(); }
+        inline char* const* argv() const noexcept { return data(); }
+        inline int argc() const noexcept { return static_cast<int>(size()); }
+
+        c_string_array_view() = default;
+        ~c_string_array_view() = default;
+        c_string_array_view(const c_string_array_view&) = default;
+        c_string_array_view& operator=(const c_string_array_view&) = default;
+        c_string_array_view(c_string_array_view&&) = default;
+        c_string_array_view& operator=(c_string_array_view&&) = default;
+
+    private:
+        static inline size_type count(value_type* data) noexcept {
+            auto first = data;
+            if (!first) { return 0; }
+            while (*first) { ++first; }
+            return first-data;
+        }
+
+    };
+
+    std::ostream& operator<<(std::ostream& out, const c_string_array_view& rhs);
+
+}
+
+#endif // vim:filetype=cpp

@@ -1,0 +1,137 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_IT_FIELD_ITERATOR
+#define UNISTDX_IT_FIELD_ITERATOR
+
+#include <tuple>
+#include <type_traits>
+
+#include <unistdx/it/iterator_pair>
+
+namespace sys {
+
+    /**
+    \brief Iterator for containers of tuples.
+    \date 2018-05-22
+    \ingroup iter
+    \tparam Base base iterator type
+    \tparam N field index to iterate over
+    \details
+    Field iterator works by aggregating another iterator
+    over tuples and accessing only certain field of the
+    tuple.
+    */
+    template <class Base, size_t N>
+    class field_iterator: public Base {
+
+    private:
+        typedef Base base_type;
+        typedef typename base_type::value_type base_value_type;
+
+    public:
+        using typename base_type::iterator_category;
+        using typename base_type::difference_type;
+
+    public:
+        /// Base iterator type.
+        typedef Base base_iterator;
+        /// Value type, which is equal to the corresponding field type.
+        typedef typename std::tuple_element<N,base_value_type>::type value_type;
+        /// Field pointer type.
+        typedef value_type* pointer;
+        /// Field reference type.
+        typedef value_type& reference;
+
+    private:
+        typedef typename std::add_const<pointer>::type const_pointer;
+        typedef typename std::add_const<reference>::type const_reference;
+
+    public:
+
+        field_iterator() = default;
+
+        /// Construct field iterator aggregating base iterator \p rhs.
+        inline
+        field_iterator(base_iterator rhs):
+        base_iterator(rhs)
+        {}
+
+        /// Copy constructor.
+        inline
+        field_iterator(const field_iterator& rhs):
+        base_iterator(rhs)
+        {}
+
+        /// Access field by pointer.
+        inline const_pointer
+        operator->() const noexcept {
+            return &std::get<N>(*this->base_iterator::operator->());
+        }
+
+        /// Access field by pointer.
+        inline pointer
+        operator->() noexcept {
+            return &std::get<N>(*this->base_iterator::operator->());
+        }
+
+        /// Dereference.
+        inline const_reference
+        operator*() const noexcept {
+            return std::get<N>(this->base_iterator::operator*());
+        }
+
+        /// Dereference.
+        inline reference
+        operator*() noexcept {
+            return std::get<N>(this->base_iterator::operator*());
+        }
+
+    };
+
+    /// Construct field iterator view from \p first and \p last.
+    template <size_t N, class T>
+    inline iterator_pair<field_iterator<T,N>>
+    make_view(T first, T last) noexcept {
+        return iterator_pair<field_iterator<T,N>>(first, last);
+    }
+
+    /// Construct field iterator view from container \p cont.
+    template <size_t N, class C>
+    inline iterator_pair<field_iterator<typename C::iterator,N>>
+    make_view(C& cont) noexcept {
+        return make_view<N,typename C::iterator>(cont.begin(), cont.end());
+    }
+
+}
+
+#endif // vim:filetype=cpp

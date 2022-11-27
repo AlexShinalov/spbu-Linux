@@ -1,0 +1,270 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_BASE_WEBSOCKET
+#define UNISTDX_BASE_WEBSOCKET
+
+#include <iosfwd>
+#include <unistdx/base/types>
+
+namespace sys {
+
+    /// WebSocket Opcode numbers.
+    enum class opcode_type : u8 {
+        cont_frame   = 0x0,
+        text_frame   = 0x1,
+        binary_frame = 0x2,
+        conn_close   = 0x8,
+        ping         = 0x9,
+        pong         = 0xa
+    };
+
+    /**
+    \brief WebSocket frame.
+    \date 2018-05-22
+    \see \rfc{6455}
+    */
+    union websocket_frame {
+
+    public:
+        /// Tag indicating that frame length is encoded using 2 bytes.
+        static const u16 length16_tag = 126;
+        /// Tag indicating that frame length is encoded using 8 bytes.
+        static const u16 length64_tag = 127;
+        /// The number of bytes used by payload mask.
+        static const size_t mask_size = 4;
+        /// Minimal number of bytes used by a frame.
+        static const size_t base_size = 2;
+
+    public:
+        /// 4-byte mask type.
+        using mask_type = u32;
+        /// 2-byte length type.
+        using length16_type = u16;
+        /// 8-byte length type.
+        using length64_type = u64;
+        using opcodes = ::sys::opcode_type;
+
+    private:
+        struct {
+            u16 opcode  : 4;
+            u16 rsv3    : 1;
+            u16 rsv2    : 1;
+            u16 rsv1    : 1;
+            u16 fin     : 1;
+            u8          : 0;
+            u16 len     : 7;
+            u16 maskbit : 1;
+            u8          : 0;
+            u16 extlen;
+            u8          : 0;
+            u32 extlen2;
+            u8          : 0;
+            u64 footer;        /// extlen3 (16) + mask (32) + padding (16)
+        } _hdr = {};
+        char _bytes[sizeof(_hdr)];
+
+        // check if header fields are aligned properly
+        static_assert(
+            offsetof(decltype(_hdr), extlen)  == 2,
+            "bad offset of hdr.extlen"
+        );
+        static_assert(
+            offsetof(decltype(_hdr), extlen2) == 4,
+            "bad offset of hdr.extlen2"
+        );
+        static_assert(
+            offsetof(decltype(_hdr), footer)  == 8,
+            "bad offset of hdr.footer"
+        );
+        static_assert(sizeof(_hdr) == 16, "bad websocket frame header size");
+
+    public:
+
+        /**
+        Set \c FIN header field, indicating that this frame
+        is the final fragment of the message.
+        */
+        inline void
+        fin(int rhs) noexcept {
+            this->_hdr.fin = rhs;
+        }
+
+        /// Set \c opcode header field, indicating the type of the payload.
+        inline void
+        opcode(opcode_type rhs) noexcept {
+            this->_hdr.opcode = static_cast<u16>(rhs);
+        }
+
+        /// Get \c opcode header field.
+        inline opcode_type
+        opcode() const noexcept {
+            return static_cast<opcode_type>(this->_hdr.opcode);
+        }
+
+        /// Returns true, if the payload is masked.
+        inline bool
+        is_masked() const noexcept {
+            return this->_hdr.maskbit == 1;
+        }
+
+        /// Returns true, if the payload is binary.
+        inline bool
+        is_binary() const noexcept {
+            return this->opcode() == opcode_type::binary_frame;
+        }
+
+        /**
+        Returns true, if opcode number is within valid range
+        (as defined by the standard).
+        */
+        inline bool
+        has_valid_opcode() const noexcept {
+            return this->_hdr.opcode >= 0x0 && this->_hdr.opcode <= 0xf;
+        }
+
+        /// Returns extended payload size in bytes.
+        inline size_t
+        extlen_size() const noexcept {
+            return this->_hdr.len == length16_tag ? sizeof(length16_type) :
+                   this->_hdr.len == length64_tag ? sizeof(length64_type) : 0;
+        }
+
+        /// Set <code>payload len</code> header field.
+        inline void
+        len(u16 rhs) noexcept {
+            this->_hdr.len = rhs;
+        }
+
+        /**
+        Set \c MASK header field, that determines whether
+        the payload is masked or not.
+        */
+        inline void
+        maskbit(u16 rhs) noexcept {
+            this->_hdr.maskbit = rhs;
+        }
+
+        /// Returns payload size in bytes.
+        length64_type
+        payload_size() const noexcept;
+
+        /// Set payload size in bytes.
+        void
+        payload_size(length64_type rhs) noexcept;
+
+        /// Pointer to the beginning of frame header.
+        inline char*
+        begin() noexcept {
+            return this->_bytes;
+        }
+
+        /// Pointer to the beginning of frame header.
+        inline const char*
+        begin() const noexcept {
+            return this->_bytes;
+        }
+
+        /// Pointer to the beginning of frame header.
+        inline char*
+        end() noexcept {
+            return this->_bytes + this->size();
+        }
+
+        /// Pointer to the end of frame header.
+        inline const char*
+        end() const noexcept {
+            return this->_bytes + this->size();
+        }
+
+        /// Pointer to the beginning of extended payload length field.
+        inline char*
+        base() noexcept {
+            return this->_bytes + base_size;
+        }
+
+        /// Pointer to the beginning of extended payload length field.
+        inline const char*
+        base() const noexcept {
+            return this->_bytes + base_size;
+        }
+
+        /// Full size of frame header.
+        inline size_t
+        size() const noexcept {
+            return base_size + this->extlen_size()
+                   + (this->is_masked() ? mask_size : 0);
+        }
+
+        /// Maximum frame header size.
+        static constexpr inline size_t
+        max_size() noexcept {
+            return base_size + sizeof(length64_type) + mask_size;
+        }
+
+        /// Minimum frame header size.
+        static constexpr inline size_t
+        min_size() noexcept {
+            return base_size;
+        }
+
+        /// Get frame mask.
+        mask_type
+        mask() const noexcept;
+
+        /// Set frame mask.
+        void
+        mask(mask_type rhs) noexcept;
+
+        /**
+        Mask payload between \p first and \p last pointers.
+        The payload is changed in-place.
+        */
+        void
+        mask_payload(char* first, char* last) const noexcept;
+
+        /// Reset frame header contents.
+        void
+        clear() noexcept;
+
+        friend std::ostream&
+        operator<<(std::ostream& out, const websocket_frame& rhs);
+
+    };
+
+    /// Output WebSocket frame header field for debugging.
+    std::ostream&
+    operator<<(std::ostream& out, const websocket_frame& rhs);
+
+}
+
+#endif // vim:filetype=cpp

@@ -1,0 +1,181 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_NET_IPV4_SOCKET_ADDRESS
+#define UNISTDX_NET_IPV4_SOCKET_ADDRESS
+
+#include <unistdx/net/family>
+#include <unistdx/net/ipv4_address>
+
+namespace sys {
+
+    /// Socket address length type.
+    using socket_length_type = ::socklen_t;
+
+    /**
+    \brief IPv4 socket address wrapper.
+    \date 2020-11-10
+    \ingroup wrapper net
+    */
+    class ipv4_socket_address {
+
+    private:
+        sockinet4_type _address{};
+
+    public:
+
+        /// Construct socket address with IPv4 address and port.
+        inline
+        ipv4_socket_address(ipv4_address address, port_type port) noexcept {
+            this->_address.sin_family = sa_family_type(socket_address_family::ipv4);
+            this->_address.sin_addr = address;
+            this->_address.sin_port = to_network_format<port_type>(port);
+        }
+
+        /**
+        \brief Construct socket address with host and port.
+        \date 2018-05-23
+        \details
+        \arg Host name resolution is not performed.
+        \arg Parameter \p host is text representation of an IP-address.
+        */
+        ipv4_socket_address(const char* host, port_type port);
+
+        /// Construct socket address from \c sockaddr_in4 system type.
+        inline ipv4_socket_address(const sockinet4_type& rhs) noexcept: _address(rhs) {}
+
+        inline ipv4_socket_address(const socket_address_type& rhs) {
+            if (rhs.sa_family != sa_family()) { throw std::invalid_argument("bad sockaddr"); }
+            std::char_traits<char>::copy(reinterpret_cast<char*>(this),
+                                         reinterpret_cast<const char*>(&rhs),
+                                         size());
+        }
+
+        inline ipv4_socket_address() noexcept: _address{} {
+            this->_address.sin_family = sa_family_type(socket_address_family::ipv4);
+        }
+
+        ~ipv4_socket_address() = default;
+        ipv4_socket_address(const ipv4_socket_address&) = default;
+        ipv4_socket_address& operator=(const ipv4_socket_address&) = default;
+        ipv4_socket_address(ipv4_socket_address&&) = default;
+        ipv4_socket_address& operator=(ipv4_socket_address&&) = default;
+
+        static constexpr inline socket_address_family family() noexcept { return socket_address_family::ipv4; }
+        static constexpr inline sa_family_type sa_family() noexcept { return sa_family_type(family()); }
+        inline ipv4_address address() const noexcept { return ipv4_address(this->_address.sin_addr); }
+        inline void address(ipv4_address rhs) noexcept { this->_address.sin_addr = rhs; }
+        inline port_type port() const noexcept {
+            return to_host_format<port_type>(this->_address.sin_port);
+        }
+        inline void port(port_type rhs) noexcept {
+            this->_address.sin_port = to_network_format<port_type>(rhs);
+        }
+        inline void clear() { this->_address = {}; }
+
+        static constexpr inline socket_length_type size() noexcept { return sizeof(sockinet4_type); }
+        inline socket_address_type* get() noexcept { return reinterpret_cast<socket_address_type*>(&this->_address); }
+        inline socket_address_type* get() const noexcept { return const_cast<socket_address_type*>(reinterpret_cast<const socket_address_type*>(&this->_address)); }
+
+        inline bool operator<(const ipv4_socket_address& rhs) const noexcept {
+            return std::make_tuple(sa_family(), address(), port()) <
+                   std::make_tuple(rhs.sa_family(), rhs.address(), rhs.port());
+        }
+
+        inline bool operator<=(const ipv4_socket_address& rhs) const noexcept {
+            return this->operator<(rhs) || this->operator==(rhs);
+        }
+
+        inline bool operator>(const ipv4_socket_address& rhs) const noexcept {
+            return !this->operator<(rhs) && !this->operator==(rhs);
+        }
+
+        inline bool operator>=(const ipv4_socket_address& rhs) const noexcept {
+            return !this->operator<(rhs);
+        }
+
+        inline bool operator==(const ipv4_socket_address& rhs) const noexcept {
+            return address() == rhs.address() &&
+                this->_address.sin_port == rhs._address.sin_port;
+        }
+
+        inline bool operator!=(const ipv4_socket_address& rhs) const noexcept {
+            return !this->operator==(rhs);
+        }
+
+        inline explicit operator bool() const noexcept { return bool(address()); }
+        inline bool operator!() const noexcept { return !this->operator bool(); }
+
+        friend std::ostream&
+        operator<<(std::ostream& out, const ipv4_socket_address& rhs);
+
+        friend std::istream&
+        operator>>(std::istream& in, ipv4_socket_address& rhs);
+
+        friend bstream&
+        operator<<(bstream& out, const ipv4_socket_address& rhs);
+
+        friend bstream&
+        operator>>(bstream& in, ipv4_socket_address& rhs);
+
+        friend struct std::hash<sys::ipv4_socket_address>;
+
+    };
+
+    std::ostream& operator<<(std::ostream& out, const ipv4_socket_address& rhs);
+    std::istream& operator>>(std::istream& in, ipv4_socket_address& rhs);
+    bstream& operator<<(bstream& out, const ipv4_socket_address& rhs);
+    bstream& operator>>(bstream& in, ipv4_socket_address& rhs);
+
+}
+
+namespace std {
+
+    /// Specialisation of \link std::hash \endlink for \link sys::ipv4_socket_address \endlink.
+    template<>
+    struct hash<sys::ipv4_socket_address>: public hash<sys::ipv4_address> {
+
+        /**
+        \brief Computes hash by XOR-ing hash of the address with port number.
+        \details
+        Depending on the address family, uses hash of either ipv4_address or ipv6_address.
+        */
+        inline size_t
+        operator()(const sys::ipv4_socket_address& rhs) const noexcept {
+            return rhs.port() ^ this->hash<sys::ipv4_address>::operator()(rhs.address());
+        }
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

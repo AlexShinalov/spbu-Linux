@@ -1,0 +1,124 @@
+#ifndef UNISTDX_FS_FILE_ATTRIBUTES
+#define UNISTDX_FS_FILE_ATTRIBUTES
+
+#include <unistdx/base/flag>
+#include <unistdx/config>
+
+#if defined(UNISTDX_HAVE_SYS_XATTR_H)
+#include <sys/types.h>
+#include <sys/xattr.h>
+#endif
+
+#include <iterator>
+#include <memory>
+
+namespace sys {
+
+    #if defined(UNISTDX_HAVE_SYS_XATTR_H)
+    enum class file_attribute_flags: int {
+        create_only=XATTR_CREATE,
+        replace_only=XATTR_REPLACE,
+    };
+
+    UNISTDX_FLAGS(file_attribute_flags);
+    #endif
+
+    enum class file_attribute_options { no_follow=1<<0 };
+
+    UNISTDX_FLAGS(file_attribute_options);
+
+    template <class T>
+    class file_attribute_iterator {
+
+    public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = T*;
+        using pointer = T*;
+        using reference = T*;
+        using difference_type = std::ptrdiff_t;
+
+    private:
+        using const_pointer = const T*;
+        using const_reference = const T*;
+        using size_type = size_t;
+
+    private:
+        pointer _begin{}, _end{};
+
+    public:
+        inline explicit
+        file_attribute_iterator(pointer begin, pointer end) noexcept:
+        _begin(begin), _end(end) {}
+
+        file_attribute_iterator() = default;
+        ~file_attribute_iterator() = default;
+        file_attribute_iterator(const file_attribute_iterator&) = default;
+        file_attribute_iterator& operator=(const file_attribute_iterator&) = default;
+        file_attribute_iterator(file_attribute_iterator&&) = default;
+        file_attribute_iterator& operator=(file_attribute_iterator&&) = default;
+
+        inline bool
+        operator==(const file_attribute_iterator& rhs) const noexcept {
+            return this->_begin == rhs._begin;
+        }
+
+        inline bool
+        operator!=(const file_attribute_iterator& rhs) const noexcept {
+            return !this->operator==(rhs);
+        }
+
+        inline const_reference operator*() const noexcept { return this->_begin; }
+        inline reference operator*() noexcept { return this->_begin; }
+        inline const_pointer operator->() const noexcept { return this->_begin; }
+        inline pointer operator->() noexcept { return this->_begin; }
+
+        /// Increment.
+        inline file_attribute_iterator&
+        operator++() noexcept {
+            while (this->_begin != this->_end && *this->_begin) { ++this->_begin; }
+            if (this->_begin != this->_end) { ++this->_begin; }
+            return *this;
+        }
+
+        inline file_attribute_iterator
+        operator++(int) noexcept {
+            file_attribute_iterator tmp(*this);
+            ++*this;
+            return tmp;
+        }
+
+    };
+
+
+    class file_attributes {
+
+    public:
+        using iterator = file_attribute_iterator<const char>;
+        using const_iterator = file_attribute_iterator<const char>;
+
+    private:
+        std::unique_ptr<char[]> _data;
+        size_t _size = 0;
+
+    public:
+
+        file_attributes() = default;
+
+        inline
+        file_attributes(std::unique_ptr<char[]>&& data, size_t size):
+        _data(std::move(data)), _size(size) {}
+
+        inline const char* data() const noexcept { return this->_data.get(); }
+        inline size_t size() const noexcept { return this->_size; }
+
+        inline const char* front() const noexcept { return this->_data.get(); }
+        inline iterator begin() noexcept { return iterator(data(), data()+size()); }
+        inline iterator end() noexcept { return iterator(data()+size(), data()+size()); }
+        inline const_iterator begin() const noexcept { return const_iterator(data(), data()+size()); }
+        inline const_iterator end() const noexcept { return const_iterator(data()+size(), data()+size()); }
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

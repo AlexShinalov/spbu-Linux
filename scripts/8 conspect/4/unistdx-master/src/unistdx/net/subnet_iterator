@@ -1,0 +1,185 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2016, 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_NET_SUBNET_ITERATOR
+#define UNISTDX_NET_SUBNET_ITERATOR
+
+#include <iterator>
+
+#include <unistdx/net/byte_order>
+
+namespace sys {
+
+    /**
+    \brief Iterator, that traverses IP addresses in a subnetwork.
+    \date 2018-05-24
+    \ingroup iter net
+    */
+    template<class Address>
+    class subnet_iterator:
+    public std::iterator<std::random_access_iterator_tag,Address> {
+
+    private:
+        typedef std::iterator<std::random_access_iterator_tag,Address> base_type;
+
+    public:
+        using typename base_type::iterator_category;
+        using typename base_type::value_type;
+        using typename base_type::pointer;
+        using typename base_type::reference;
+        using typename base_type::difference_type;
+
+    public:
+        /// Address type.
+        typedef Address addr_type;
+        /// Adress representation type.
+        typedef typename addr_type::rep_type rep_type;
+
+    private:
+        rep_type _idx;
+        addr_type _addr;
+
+    public:
+
+        subnet_iterator() = default;
+
+        /// Copy-constructor.
+        subnet_iterator(const subnet_iterator&) = default;
+
+        /// Move-constructor.
+        subnet_iterator(subnet_iterator&&) = default;
+
+        ~subnet_iterator() = default;
+
+        /// Assignment.
+        subnet_iterator& operator=(const subnet_iterator&) = default;
+
+        /// Construct iterator from address integer representation.
+        inline explicit constexpr
+        subnet_iterator(rep_type idx) noexcept:
+        _idx(idx),
+        _addr(this->make_addr())
+        {}
+
+        /// Construct iterator from address \p addr.
+        inline explicit constexpr
+        subnet_iterator(const addr_type& addr) noexcept:
+        _idx(to_host_format(addr.rep())),
+        _addr(addr)
+        {}
+
+        /// Compare address integer representations.
+        inline constexpr bool
+        operator==(const subnet_iterator& rhs) const noexcept {
+            return this->_idx == rhs._idx;
+        }
+
+        /// \copydoc operator==
+        inline constexpr bool
+        operator!=(const subnet_iterator& rhs) const noexcept {
+            return !this->operator==(rhs);
+        }
+
+        /// Dereference.
+        inline constexpr const addr_type&
+        operator*() const noexcept {
+            return this->_addr;
+        }
+
+        /// Access object by pointer.
+        inline constexpr const addr_type*
+        operator->() const noexcept {
+            return &this->_addr;
+        }
+
+        /// Increment.
+        inline subnet_iterator&
+        operator++() noexcept {
+            ++this->_idx;
+            this->_addr = this->make_addr();
+            return *this;
+        }
+
+        /// Post-increment.
+        inline subnet_iterator
+        operator++(int) noexcept {
+            subnet_iterator tmp(*this);
+            this->operator++();
+            return tmp;
+        }
+
+        /// Decrement.
+        inline subnet_iterator&
+        operator--() noexcept {
+            --this->_idx;
+            this->_addr = this->make_addr();
+            return *this;
+        }
+
+        /// Decrement.
+        inline subnet_iterator&
+        operator--(int) noexcept {
+            subnet_iterator tmp(*this);
+            this->operator--();
+            return tmp;
+        }
+
+        /// Add.
+        inline constexpr subnet_iterator
+        operator+(difference_type rhs) const noexcept {
+            return subnet_iterator(this->_idx + rhs);
+        }
+
+        /// Subtract a scalar.
+        inline constexpr subnet_iterator
+        operator-(difference_type rhs) const noexcept {
+            return subnet_iterator(this->_idx - rhs);
+        }
+
+        /// Subtract iterators.
+        inline constexpr difference_type
+        operator-(const subnet_iterator& rhs) const noexcept {
+            return rhs._idx - this->_idx;
+        }
+
+    private:
+
+        inline addr_type
+        make_addr() const noexcept {
+            return addr_type(to_network_format(_idx));
+        }
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

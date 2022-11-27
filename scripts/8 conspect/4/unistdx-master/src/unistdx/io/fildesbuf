@@ -1,0 +1,394 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2016, 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_IO_FILDESBUF
+#define UNISTDX_IO_FILDESBUF
+
+#include <streambuf>
+
+#include <unistdx/base/byte_buffer>
+#include <unistdx/base/contracts>
+#include <unistdx/base/streambuf_traits>
+#include <unistdx/bits/no_copy_and_move>
+#include <unistdx/io/fildes>
+#include <unistdx/system/resource>
+
+#if !defined(NDEBUG) && defined(UNISTDX_DEBUG_FILDESBUF)
+#include <unistdx/bits/debug_message>
+#endif
+
+namespace sys {
+
+    /**
+    \brief Stream buffer that writes and reads from file descriptor.
+    \date 2018-05-23
+    \ingroup streambuf io
+    \see fildes, fildes_pair, socket
+    \tparam Fd File descriptor type. Can be a wrapper class or \c int.
+    \arg Input/output file descriptor operations are assumed
+    to be non-blocking.
+    \arg Does not flush its contents when closed.
+    */
+    template<class Ch, class Tr=std::char_traits<Ch>, class Fd=sys::fildes>
+    class basic_fildesbuf: public virtual std::basic_streambuf<Ch,Tr> {
+
+    private:
+        typedef std::basic_streambuf<Ch,Tr> base_type;
+        typedef streambuf_traits<Fd> straits_type;
+        typedef std::ios_base::openmode openmode;
+        typedef std::ios_base::seekdir seekdir;
+        typedef byte_buffer buffer_type;
+        typedef typename buffer_type::size_type size_type;
+
+    protected:
+        using base_type::gptr;
+        using base_type::eback;
+        using base_type::egptr;
+        using base_type::pptr;
+        using base_type::pbase;
+        using base_type::epptr;
+        using base_type::setg;
+        using base_type::setp;
+        using base_type::gbump;
+        using base_type::pbump;
+
+    public:
+        using typename base_type::char_type;
+        using typename base_type::int_type;
+        using typename base_type::traits_type;
+        using typename base_type::pos_type;
+        using typename base_type::off_type;
+
+    public:
+        /// File descriptor type.
+        typedef Fd fd_type;
+
+    private:
+        /// File descriptor playing the role of a sink and a source. Any
+        /// class for which specialisation of streambuf_traits exists
+        /// can be used here.
+        fd_type _fd;
+        /// A byte buffer for \em get operations.
+        buffer_type _gbuf;
+        /// A byte buffer for \em put operations.
+        buffer_type _pbuf;
+
+    public:
+
+        inline
+        basic_fildesbuf():
+        basic_fildesbuf(std::move(fd_type()), page_size())
+        {}
+
+        /// Construct the buffer with file descriptor \p fd.
+        inline explicit
+        basic_fildesbuf(fd_type&& fd):
+        basic_fildesbuf(std::move(fd), page_size())
+        {}
+
+        /**
+        Construct the buffer with file descriptor \p fd and get and put area
+        size equal to \p bufsize.
+        */
+        inline
+        basic_fildesbuf(fd_type&& fd, size_type bufsize):
+        basic_fildesbuf(std::move(fd), bufsize, bufsize)
+        {}
+
+        /**
+        Construct the buffer with file descriptor \p fd, get area size \p gbufsize
+        and put area size \p pbufsize.
+        */
+        inline
+        basic_fildesbuf(fd_type&& fd, size_type gbufsize, size_type pbufsize):
+        _fd(std::move(fd)), _gbuf(gbufsize), _pbuf(pbufsize) {
+            this->reset_gbuf();
+            this->reset_pbuf();
+        }
+
+        UNISTDX_NO_COPY_AND_MOVE(basic_fildesbuf)
+
+        /// Overrides \link std::streambuf::underflow \endlink.
+        int_type
+        underflow() override {
+            UNISTDX_ASSERTION(gptr() == egptr());
+            this->reset_gbuf();
+            return this->fill() == 0
+                   ? traits_type::eof()
+                   : traits_type::to_int_type(*gptr());
+        }
+
+        /// Overrides \link std::streambuf::xsgetn \endlink.
+        std::streamsize
+        xsgetn(char_type* s, std::streamsize n) override {
+            while (available() < n && fill() > 0) {}
+            const std::streamsize m = std::min(n, available());
+            traits_type::copy(s, gptr(), m);
+            gbump(m);
+            return m;
+        }
+
+        /// Overrides \link std::streambuf::xsputn \endlink.
+        std::streamsize
+        xsputn(const char_type* s, std::streamsize n) override {
+            const std::streamsize remaining = epptr() - pptr();
+            if (remaining < n) {
+                std::streamsize new_size = this->_pbuf.size();
+                const std::streamsize offset = new_size - remaining;
+                while (new_size - offset < n) {
+                    new_size *= 2;
+                }
+                this->pgrow(new_size);
+            }
+            traits_type::copy(pptr(), s, n);
+            pbump(n);
+            return n;
+        }
+
+        /// Overrides \link std::streambuf::sync \endlink.
+        int
+        sync() override {
+            int ret = 0;
+            if (this->_pbuf) {
+                ret |= this->flush()==-1 ? -1 : 0;
+            }
+            if (this->_gbuf) {
+                ret |= this->fill()==-1 ? -1 : 0;
+            }
+            return ret;
+        }
+
+        /// Flush put area contents to file descriptor.
+        inline std::streamsize
+        pubflush() {
+            return this->flush();
+        }
+
+        /// Fill get area from file descriptor.
+        inline std::streamsize
+        pubfill() {
+            return this->fill();
+        }
+
+        /// Set file descriptor.
+        inline void
+        setfd(fd_type&& rhs) {
+            this->_fd = std::move(rhs);
+        }
+
+        /// Get file descriptor.
+        inline const fd_type&
+        fd() const {
+            return this->_fd;
+        }
+
+        /// Get file descriptor.
+        inline fd_type&
+        fd() {
+            return this->_fd;
+        }
+
+        /// Close file descriptor.
+        inline void
+        close() {
+            this->_fd.close();
+        }
+
+        /// Compact buffer.
+        inline void
+        compact() {
+            #if !defined(NDEBUG) && defined(UNISTDX_DEBUG_FILDESBUF)
+            this->log("compact");
+            #endif
+            // reset gbuf if it was fully read
+            if (gptr() != egptr()) {
+                const std::streamsize n = available();
+                traits_type::move(eback(), gptr(), n);
+                setg(eback(), eback(), eback() + n);
+            } else {
+                this->reset_gbuf();
+            }
+        }
+
+        /// Swap with \p rhs.
+        inline void
+        swap(basic_fildesbuf& rhs) {
+            swap(this->_fd, rhs._fd);
+            this->_gbuf.swap(rhs._gbuf);
+            this->_pbuf.swap(rhs._pbuf);
+        }
+
+        /// Returns true, if put buffer is non-empty.
+        inline bool
+        dirty() const noexcept {
+            return this->pptr() != this->pbase();
+        }
+
+        /// Returns the number of remaining bytes in put buffer.
+        inline std::streamsize
+        remaining() const noexcept {
+            return this->pptr() - this->pbase();
+        }
+
+        /// Returns the number of available bytes in get buffer.
+        inline std::streamsize
+        available() const noexcept {
+            return this->egptr() - this->gptr();
+        }
+
+    private:
+
+        inline std::streamsize
+        fill() {
+            const std::streamsize old_egptr_offset = egptr() - eback();
+            char_type* first = egptr();
+            char_type* last = glast();
+            UNISTDX_ASSERTION(first != last);
+            std::streamsize n = 0;
+            while ((n = straits_type::read(_fd, first, last-first)) > 0) {
+                first += n;
+                setg(eback(), gptr(), first);
+                if (first == last) {
+                    ggrow();
+                    first = egptr();
+                    last = glast();
+                }
+            }
+            std::streamsize ret = first - (eback() + old_egptr_offset);
+            #if !defined(NDEBUG) && defined(UNISTDX_DEBUG_FILDESBUF)
+            this->log("fill _, n=_", ret, n);
+            #endif
+            return ret;
+        }
+
+        inline std::streamsize
+        flush() {
+            const std::streamsize m = this->remaining();
+            if (m == 0) return 0;
+            const std::streamsize n =
+                straits_type::write(this->_fd, pbase(), m);
+            const bool success = n==m;
+            if (success) {
+                this->reset_pbuf();
+            } else if (n > 0) {
+                setp(pbase()+n, epptr());
+                pbump(m-n);
+            }
+            #if !defined(NDEBUG) && defined(UNISTDX_DEBUG_FILDESBUF)
+            this->log("flush _, remaining=_", n, remaining());
+            #endif
+            return n==-1 ? 0 : n;
+        }
+
+        void
+        reset_gbuf() {
+            char_type* g = this->gfirst();
+            setg(g, g, g);
+        }
+
+        void
+        reset_pbuf() {
+            setp(pfirst(), plast());
+        }
+
+        inline char_type*
+        gfirst() noexcept {
+            return this->_gbuf.begin();
+        }
+
+        inline char_type*
+        glast() noexcept {
+            return this->_gbuf.end();
+        }
+
+        inline void
+        ggrow() {
+            const off_type gptr_offset = gptr()-eback();
+            const off_type egptr_offset = egptr()-eback();
+            this->_gbuf.grow();
+            #if !defined(NDEBUG) && defined(UNISTDX_DEBUG_FILDESBUF)
+            this->log("ggrow size=_", this->_gbuf.size());
+            #endif
+            char_type* base = this->gfirst();
+            setg(base, base + gptr_offset, base + egptr_offset);
+            UNISTDX_ASSERTION(gptr() - eback() == gptr_offset);
+            UNISTDX_ASSERTION(egptr() - eback() == egptr_offset);
+        }
+
+        inline char_type*
+        pfirst() noexcept {
+            return this->_pbuf.begin();
+        }
+
+        inline char_type*
+        plast() noexcept {
+            return this->_pbuf.end();
+        }
+
+        inline void
+        pgrow(std::streamsize new_size) {
+            UNISTDX_ASSERTION(new_size > std::streamsize(this->_pbuf.size()));
+            #if !defined(NDEBUG) && defined(UNISTDX_DEBUG_FILDESBUF)
+            this->log("pgrow size=_", new_size);
+            #endif
+            const off_type pptr_offset = pptr() - pbase();
+            const off_type pbase_offset = pbase() - pfirst();
+            this->_pbuf.resize(new_size);
+            setp(pfirst() + pbase_offset, plast());
+            pbump(pptr_offset);
+            UNISTDX_ASSERTION(pptr() - pbase() == pptr_offset);
+            UNISTDX_ASSERTION(pbase() - pfirst() == pbase_offset);
+        }
+
+        #if !defined(NDEBUG) && defined(UNISTDX_DEBUG_FILDESBUF)
+        template <class ... Args>
+        inline void
+        log(const char* fmt, const Args& ... args) const {
+            debug_message(this->_name, fmt, args...);
+        }
+        #endif
+
+    };
+
+    /// Overload of \link std::swap \endlink for \link basic_fildesbuf \endlink.
+    template<class Ch, class Tr, class Fd>
+    inline void
+    swap(basic_fildesbuf<Ch,Tr,Fd>& lhs, basic_fildesbuf<Ch,Tr,Fd>& rhs) {
+        lhs.swap(rhs);
+    }
+
+    /// Alias to basic_fildesbuf<char>.
+    typedef basic_fildesbuf<char> fildesbuf;
+
+}
+
+#endif // vim:filetype=cpp

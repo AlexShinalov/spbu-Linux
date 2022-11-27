@@ -1,0 +1,163 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2016, 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_TEST_DATUM
+#define UNISTDX_TEST_DATUM
+
+#include <chrono>
+#include <random>
+
+#include <unistdx/base/types>
+#include <unistdx/net/bstream>
+
+typedef std::chrono::nanoseconds::rep Time;
+
+Time time_seed() {
+    return std::chrono::high_resolution_clock::now().time_since_epoch().count();
+}
+
+template<class T>
+void rnd(T& val) {
+    typedef typename
+        std::conditional<std::is_floating_point<T>::value,
+            std::uniform_real_distribution<T>,
+                std::uniform_int_distribution<T>>::type
+                    Distribution;
+    typedef std::default_random_engine::result_type Res_type;
+    static std::default_random_engine generator(static_cast<Res_type>(time_seed()));
+    static Distribution distribution(std::numeric_limits<T>::min(),std::numeric_limits<T>::max());
+    val = distribution(generator);
+}
+
+struct Datum {
+
+    Datum():
+        x(0), y(0), z(0),
+        u(0), v(0), w(0)
+    {
+        rnd(x); rnd(y); rnd(static_cast<sys::f32&>(z));
+        rnd(static_cast<sys::f64&>(u)); rnd(v); rnd(w);
+    }
+
+    constexpr
+    Datum(const Datum& rhs):
+        x(rhs.x), y(rhs.y), z(rhs.z),
+        u(rhs.u), v(rhs.v), w(rhs.w)
+    {}
+
+    bool
+    operator==(const Datum& rhs) const {
+        return
+            x == rhs.x && y == rhs.y && z == rhs.z &&
+            u == rhs.u && v == rhs.v && w == rhs.w;
+    }
+
+    bool
+    operator!=(const Datum& rhs) const {
+        return
+            x != rhs.x || y != rhs.y || z != rhs.z ||
+            u != rhs.u || v != rhs.v || w != rhs.w;
+    }
+
+    template <class Ch>
+    friend sys::basic_bstream<Ch>&
+    operator<<(sys::basic_bstream<Ch>& out, const Datum& rhs) {
+        return out
+            << rhs.x << rhs.y << rhs.z
+            << rhs.u << rhs.v << rhs.w;
+    }
+
+    template <class Ch>
+    friend sys::basic_bstream<Ch>&
+    operator>>(sys::basic_bstream<Ch>& in, Datum& rhs) {
+        return in
+            >> rhs.x >> rhs.y >> rhs.z
+            >> rhs.u >> rhs.v >> rhs.w;
+    }
+
+    template <class Ch>
+    friend std::basic_ostream<Ch>&
+    operator<<(std::basic_ostream<Ch>& out, const Datum& rhs) {
+        write_raw(out, rhs.x);
+        write_raw(out, rhs.y);
+        write_raw(out, rhs.z);
+        write_raw(out, rhs.u);
+        write_raw(out, rhs.v);
+        write_raw(out, rhs.w);
+        return out;
+    }
+
+    template <class Ch>
+    friend std::basic_istream<Ch>&
+    operator>>(std::basic_istream<Ch>& in, Datum& rhs) {
+        read_raw(in, rhs.x);
+        read_raw(in, rhs.y);
+        read_raw(in, rhs.z);
+        read_raw(in, rhs.u);
+        read_raw(in, rhs.v);
+        read_raw(in, rhs.w);
+        return in;
+    }
+
+    constexpr static size_t real_size() {
+        return
+            sizeof(x) + sizeof(y) + sizeof(z) +
+            sizeof(u) + sizeof(v) + sizeof(w);
+    }
+
+private:
+
+    template<class T, class Ch>
+    static void
+    write_raw(std::basic_ostream<Ch>& out, const T& rhs) {
+        sys::bytes<T> raw = rhs;
+        out.write(raw.begin(), raw.size());
+    }
+
+    template<class T, class Ch>
+    static void
+    read_raw(std::basic_istream<Ch>& in, T& rhs) {
+        sys::bytes<T> raw;
+        in.read(raw.begin(), raw.size());
+        rhs = raw;
+    }
+
+    sys::i64 x;
+    sys::i32 y;
+    sys::bytes<sys::f32> z;
+    sys::bytes<sys::f64> u;
+    sys::i16 v;
+    sys::i8 w;
+    char padding[5] = {};
+};
+
+#endif // vim:filetype=cpp

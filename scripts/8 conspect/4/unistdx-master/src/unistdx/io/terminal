@@ -1,0 +1,115 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_IO_TERMINAL
+#define UNISTDX_IO_TERMINAL
+
+#include <unistd.h>
+
+#include <unistdx/base/check>
+#include <unistdx/base/types>
+#include <unistdx/fs/path>
+#include <unistdx/io/fd_type>
+
+namespace sys {
+
+    /**
+    \brief Returns true, if file descriptor \p f refers to a terminal.
+    \ingroup io
+    \throws bad_call
+    \see \man{isatty,3}
+    */
+    inline bool
+    is_a_terminal(sys::fd_type f) {
+        int ret = ::isatty(f);
+        UNISTDX_CHECK(ret);
+        return ret == 1;
+    }
+
+    namespace terminal {
+
+        enum struct colors: u8 {
+            reset            = 0,
+            fg_red           = 31,
+            fg_green         = 32,
+            fg_yellow        = 33,
+            fg_blue          = 34,
+            fg_magenta       = 35,
+            fg_cyan          = 36,
+            fg_light_gray    = 37,
+            fg_dark_gray     = 90,
+            fg_light_red     = 91,
+            fg_light_green   = 92,
+            fg_light_yellow  = 93,
+            fg_light_blue    = 94,
+            fg_light_magenta = 95,
+            fg_light_cyan    = 96,
+            fg_white         = 97,
+            fg_default       = 39,
+            bg_red           = 41,
+            bg_green         = 42,
+            bg_blue          = 44,
+            bg_default       = 49,
+        };
+
+        template <size_t N, char Ch>
+        struct escape_sequence { u32 args[N]; };
+
+        template <size_t N, char Ch>
+        inline std::ostream& operator<<(std::ostream& out, const escape_sequence<N,Ch>& rhs) {
+            if (out.iword(0) != 1) { return out; }
+            out.put('\033').put('[');
+            if (N != 0) { out << rhs.args[0]; }
+            for (size_t i=1; i<N; ++i) { out.put(';'); out << rhs.args[i]; }
+            return out.put(Ch);
+        }
+
+        inline escape_sequence<1,'m'> reset() noexcept { return {0}; }
+        inline escape_sequence<1,'m'> bold() noexcept { return {1}; }
+        inline escape_sequence<1,'m'> underline() noexcept { return {4}; }
+        inline escape_sequence<1,'m'> reversed() noexcept { return {7}; }
+        // 16 colors
+        inline escape_sequence<1,'m'> color(colors c) noexcept { return {u8(c)}; }
+        // 8-bit colors
+        inline escape_sequence<3,'m'> foreground_color(u8 c) noexcept { return {38,5,c}; }
+        inline escape_sequence<3,'m'> background_color(u8 c) noexcept { return {48,5,c}; }
+        // 24-bit colors
+        inline escape_sequence<5,'m'> foreground_color(u8 r, u8 g, u8 b) noexcept { return {38,2,r,g,b}; }
+        inline escape_sequence<5,'m'> background_color(u8 r, u8 g, u8 b) noexcept { return {48,2,r,g,b}; }
+        inline escape_sequence<2,'H'> move(u32 line, u32 column) noexcept { return {line,column}; }
+        inline escape_sequence<0,'J'> clear() noexcept { return {}; }
+
+    }
+
+}
+
+#endif // vim:filetype=cpp

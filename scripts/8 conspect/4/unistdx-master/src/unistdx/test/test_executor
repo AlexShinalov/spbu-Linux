@@ -1,0 +1,327 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2020, 2021 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_TEST_TEST_EXECUTOR
+#define UNISTDX_TEST_TEST_EXECUTOR
+
+#include <atomic>
+#include <chrono>
+#include <deque>
+#include <iomanip>
+#include <iosfwd>
+#include <mutex>
+#include <random>
+#include <sstream>
+#include <thread>
+#include <typeindex>
+#include <vector>
+
+#include <unistdx/base/byte_buffer>
+#include <unistdx/io/poller>
+#include <unistdx/ipc/process>
+#include <unistdx/ipc/process_group>
+#include <unistdx/system/error>
+#include <unistdx/system/linker>
+
+namespace sys {
+    namespace test {
+
+        class Symbol {
+
+        private:
+            std::string _original_name;
+            std::string _demangled_name;
+            std::string _short_name;
+            elf::symbol_types _type{};
+            void* _address{};
+
+        public:
+
+            inline void original_name(std::string&& rhs) {
+                this->_original_name = std::move(rhs);
+            }
+
+            void demangled_name(std::string&& rhs);
+            inline void address(void* rhs) noexcept { this->_address = rhs; }
+            inline const void* address() const noexcept { return this->_address; }
+            inline void* address() noexcept { return this->_address; }
+
+            inline const std::string& original_name() const noexcept {
+                return this->_original_name;
+            }
+
+            inline const std::string& demangled_name() const noexcept {
+                return this->_demangled_name;
+            }
+
+            inline const std::string& short_name() const noexcept { return this->_short_name; }
+            inline elf::symbol_types type() const noexcept { return this->_type; }
+            inline void type(elf::symbol_types rhs) noexcept { this->_type = rhs; }
+
+            template <class Return, class ... Args>
+            Return call(Args&& ... args) const {
+                auto func = reinterpret_cast<Return(*)(...)>(address());
+                return func(std::forward<Args>(args)...);
+            }
+
+            template <class Return>
+            Return apply(const std::vector<const void*>& a) const {
+                switch (a.size()) {
+                    case 0: return call<Return>(); break;
+                    case 1: return call<Return>(a[0]); break;
+                    case 2: return call<Return>(a[0],a[1]); break;
+                    case 3: return call<Return>(a[0],a[1],a[2]); break;
+                    case 4: return call<Return>(a[0],a[1],a[2],a[3]); break;
+                    case 5: return call<Return>(a[0],a[1],a[2],a[3],a[4]); break;
+                    case 6: return call<Return>(a[0],a[1],a[2],a[3],a[4],a[5]); break;
+                    case 7: return call<Return>(a[0],a[1],a[2],a[3],a[4],a[5],a[6]); break;
+                    case 8: return call<Return>(a[0],a[1],a[2],a[3],a[4],a[5],a[6],a[7]); break;
+                    case 9: return call<Return>(a[0],a[1],a[2],a[3],a[4],a[5],a[6],a[7],a[8]); break;
+                    case 10: return call<Return>(a[0],a[1],a[2],a[3],a[4],a[5],a[6],a[7],a[8],a[9]); break;
+                    default: throw std::invalid_argument("apply: bad no. of arguments");
+                }
+            }
+
+            Symbol() = default;
+            ~Symbol() = default;
+            Symbol(const Symbol&) = default;
+            Symbol& operator=(const Symbol&) = default;
+            Symbol(Symbol&&) = default;
+            Symbol& operator=(Symbol&&) = default;
+        };
+
+        class Test;
+
+        class Backtrace_thread {
+        public:
+            sys::signal signal{};
+            std::mutex mutex;
+            std::condition_variable cv;
+            std::atomic<bool> stopped{false};
+            std::thread thread;
+            sys::stack_trace backtrace{false};
+
+            void run(Test* t);
+            void capture_backtrace(int sig);
+            inline void stop() {
+                std::unique_lock<std::mutex> lock(mutex);
+                stopped = true; cv.notify_one();
+            }
+            inline void join() { if (thread.joinable()) { thread.join(); } }
+
+            Backtrace_thread() = default;
+            ~Backtrace_thread() = default;
+            Backtrace_thread(const Backtrace_thread&) = delete;
+            Backtrace_thread& operator=(const Backtrace_thread&) = delete;
+            Backtrace_thread(Backtrace_thread&&) = default;
+            Backtrace_thread& operator=(Backtrace_thread&&) = default;
+
+        };
+
+        class Test {
+
+        public:
+            enum class Status {
+                Unknown=0,
+                Success,
+                Exception,
+                Unknown_exception,
+                Killed,
+                Skipped
+            };
+
+        private:
+            Symbol _function;
+            Symbol _arguments;
+            std::vector<size_t> _seeds{
+                size_t(std::chrono::steady_clock::now().time_since_epoch().count()),
+                size_t(std::random_device{}()),
+            };
+            Status _status = Status::Success;
+            sys::signal _signal{};
+            std::string _exception_type;
+            std::string _exception_text;
+            int _num_errors = 0;
+            int _exit_code = 0;
+
+        public:
+            inline explicit Test(Symbol&& function):
+            Test(std::move(function), {}) {}
+
+            inline explicit Test(Symbol&& function, Symbol&& arguments):
+            _function(std::move(function)), _arguments(std::move(arguments)) {}
+
+            inline const Symbol& symbol() const noexcept { return this->_function; }
+            inline const Symbol& arguments() const noexcept { return this->_arguments; }
+
+            inline void arguments(Symbol&& rhs) {
+                this->_arguments = std::move(rhs);
+            }
+
+            inline std::default_random_engine prng() const {
+                std::seed_seq seq(this->_seeds.begin(), this->_seeds.end());
+                return std::default_random_engine(seq);
+            }
+
+            inline int num_errors() const noexcept { return this->_num_errors; }
+            inline Status status() const noexcept { return this->_status; }
+            inline void status(Status rhs) noexcept { this->_status = rhs; }
+            inline bool success() const noexcept { return status() == Status::Success; }
+            inline sys::signal signal() const noexcept { return this->_signal; }
+            inline void signal(sys::signal rhs) noexcept { this->_signal = rhs; }
+
+            inline const std::string& exception_text() const noexcept {
+                return this->_exception_text;
+            }
+
+            inline const std::string& exception_type() const noexcept {
+                return this->_exception_type;
+            }
+
+            inline void exception_type(const std::string& rhs) noexcept {
+                this->_exception_type = rhs;
+            }
+
+            inline void exception_text(const std::string& rhs) noexcept {
+                this->_exception_text = rhs;
+            }
+
+            inline int exit_code() const noexcept { return this->_exit_code; }
+            inline void exit_code(int rhs) noexcept { this->_exit_code = rhs; }
+
+            int run();
+
+            void record_error(error err);
+            void record_process_status(sys::process_status status);
+
+            void child_write_status(std::ostream& out) const;
+            void parent_write_status(std::ostream& out) const;
+            void write(sys::byte_buffer& out) const;
+            void read(sys::byte_buffer& in);
+
+            Test() = default;
+            ~Test() = default;
+            Test(const Test&) = delete;
+            Test& operator=(const Test&) = delete;
+            Test(Test&&) = default;
+            Test& operator=(Test&&) = default;
+
+        };
+
+        const char* to_string(Test::Status rhs) noexcept;
+        std::ostream& operator<<(std::ostream& out, Test::Status rhs);
+
+        extern thread_local Test* current_test;
+
+        class Test_output {
+
+        public:
+            using Clock = std::chrono::steady_clock;
+            using time_point = Clock::time_point;
+            using duration = Clock::duration;
+
+        public:
+            time_point start_time;
+            Test test;
+            sys::fildes fd;
+            sys::byte_buffer output;
+
+            void write_status(std::ostream& out) const;
+        };
+
+        class Test_executor {
+
+        public:
+            using Clock = std::chrono::steady_clock;
+            using time_point = Clock::time_point;
+            using duration = Clock::duration;
+
+        private:
+            std::vector<sys::process> _child_processes;
+            std::deque<Test> _tests;
+            sys::event_poller _poller;
+            std::mutex _mutex;
+            duration _timeout = std::chrono::seconds(30);
+            sys::process::flags _process_flags =
+                sys::process::flags::fork | sys::process::flags::signal_parent |
+                sys::process::flags::unshare_users | sys::process::flags::unshare_network;
+            bool _catch_errors = true;
+            bool _verbose = false;
+            bool _redirect = true;
+
+        public:
+            template <class ... Args>
+            inline void emplace(Args&& ... args) {
+                this->_tests.emplace_back(std::forward<Args>(args)...);
+            }
+
+            bool test_arguments(const std::string& test_name, Symbol&& arguments);
+
+            int run();
+
+            inline bool catch_errors() const noexcept { return this->_catch_errors; }
+            inline void catch_errors(bool rhs) noexcept { this->_catch_errors = rhs; }
+            inline bool verbose() const noexcept { return this->_verbose; }
+            inline void verbose(bool rhs) noexcept { this->_verbose = rhs; }
+            inline bool redirect() const noexcept { return this->_redirect; }
+            inline void redirect(bool rhs) noexcept { this->_redirect = rhs; }
+            inline void timeout(duration rhs) noexcept { this->_timeout = rhs; }
+
+            inline sys::process::flags process_flags() const noexcept {
+                return this->_process_flags;
+            }
+
+            inline void process_flags(sys::process::flags rhs) noexcept {
+                this->_process_flags = rhs;
+            }
+
+            inline void send(sys::signal s) {
+                for (auto& p : this->_child_processes) { p.send(s); }
+            }
+
+            inline void wait() {
+                for (auto& p : this->_child_processes) { p.wait(); }
+            }
+
+        private:
+            int print_child_process_status(sys::pid_type process_id,
+                                           Test_output& output,
+                                           size_t& num_finished,
+                                           size_t num_tests);
+
+        };
+
+
+    }
+}
+
+#endif // vim:filetype=cpp

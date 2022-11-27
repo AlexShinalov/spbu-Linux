@@ -1,0 +1,265 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2019, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_FS_IDIRTREE
+#define UNISTDX_FS_IDIRTREE
+
+#include <queue>
+
+#include <unistdx/fs/idirectory>
+
+namespace sys {
+
+    /**
+    \brief Recursive directory entry input stream.
+    \date 2018-05-25
+    \ingroup stream fs
+    \tparam FilePred file predicate type, that determines which
+    directory entries to include in the stream.
+    \tparam DirPred directory predicate type, that determines which
+    directories to recurse into.
+    \see directory_entry
+    \details
+    An input stream from which directories entries are read recursively.
+    \arg File and directory predicates may have internal state.
+    */
+    template<class FilePred, class DirPred>
+    class basic_idirtree: public basic_idirectory<FilePred> {
+
+    private:
+        typedef basic_idirectory<FilePred> base_type;
+
+    public:
+        using typename base_type::state;
+        using typename base_type::filepred_type;
+        using typename base_type::value_type;
+        using typename base_type::reference;
+        using typename base_type::const_reference;
+        using typename base_type::pointer;
+        using typename base_type::const_pointer;
+        using base_type::eofbit;
+        using iterator = basic_istream_iterator<basic_idirtree,value_type>;
+        /// Directory predicate type.
+        using dirpred_type = DirPred;
+
+    private:
+        std::queue<sys::path> _dirs;
+        dirpred_type _dirpred;
+
+    public:
+
+        basic_idirtree() = default;
+
+        /**
+        Construct recursive directory entry input stream for
+        input directory \p starting_point.
+        */
+        inline explicit
+        basic_idirtree(path_view starting_point):
+        base_type(starting_point) {
+            this->_dirs.emplace(starting_point);
+        }
+
+        /// Open path \p p as input directory.
+        inline void
+        open(path_view p) {
+            while (!this->_dirs.empty()) {
+                this->_dirs.pop();
+            }
+            base_type::open(p);
+            this->_dirs.emplace(p);
+        }
+
+        /// Path to the directory which is currently being traversed.
+        inline const path&
+        current_dir() const noexcept {
+            return this->_dirs.front();
+        }
+
+        /// Get directory predicate.
+        inline const dirpred_type&
+        getdirpred() const noexcept {
+            return this->_dirpred;
+        }
+
+        /// Get directory predicate.
+        inline dirpred_type&
+        getdirpred() noexcept {
+            return this->_dirpred;
+        }
+
+        /// Set directory predicate.
+        inline void
+        setdirpred(dirpred_type rhs) {
+            this->_dirpred = rhs;
+        }
+
+        /// Get next directory entry as \link directory_entry \endlink.
+        inline basic_idirtree&
+        operator>>(directory_entry& rhs) {
+            this->read_direntry(rhs);
+            return *this;
+        }
+
+        /// Go to the next directory.
+        inline void
+        next_directory() {
+            if (this->_dirs.empty()) {
+            } else {
+                this->_dirs.pop();
+                if (this->_dirs.empty()) {
+                    this->setstate(eofbit);
+                } else {
+                    this->base_type::open(this->_dirs.front());
+                }
+            }
+        }
+
+        /// Return the number of directories in the stack.
+        inline size_t
+        num_directories() const noexcept {
+            return this->_dirs.size();
+        }
+
+        inline iterator begin() { return iterator(*this); }
+        inline iterator end() { return iterator(); }
+
+    private:
+
+        template<class Entry>
+        inline void
+        read_direntry(Entry& rhs) {
+            if (!this->is_open()) {
+                this->next_directory();
+            }
+            bool success = false;
+            while (!success && !this->eof()) {
+                if (this->base_type::operator>>(rhs)) {
+                    success = true;
+                    const path& cur = this->current_dir();
+                    if (this->_dirpred(cur, rhs)) {
+                        this->_dirs.emplace(cur, rhs.name());
+                    }
+                } else {
+                    this->clear();
+                    this->next_directory();
+                }
+            }
+        }
+
+    };
+
+    /**
+    \brief Do not recurse to hidden directories when traversing directories.
+    \date 2018-05-25
+    \details
+    \arg Default directory predicate for \link idirtree \endlink.
+    \arg Caches file status, which is accessed with \link status \endlink method.
+    \arg File status is updated only if file system does not return file type in
+    \link directory_entry \endlink.
+    \ingroup fs
+    */
+    struct ignore_hidden_dirs {
+
+    private:
+        file_status _stat;
+        file_type _type = file_type(DT_UNKNOWN);
+
+    public:
+
+        /// Returns true, if directory entry is not hidden.
+        inline bool
+        operator()(const path& prefix, const directory_entry& rhs) {
+            return !rhs.is_hidden() && this->type(prefix, rhs) == file_type::directory;
+        }
+
+        /// Get file status.
+        inline const file_status&
+        status() const noexcept {
+            return this->_stat;
+        }
+
+        /// Get file status.
+        inline file_status&
+        status() noexcept {
+            return this->_stat;
+        }
+
+        /// Returns true if file status was queried for the current file.
+        inline bool
+        has_status() const noexcept {
+            return this->_type == file_type(DT_UNKNOWN);
+        }
+
+        /// Returns true if file status was not queried for the current file.
+        inline bool
+        has_type() const noexcept {
+            return !this->has_status();
+        }
+
+        /// Get or compute file status.
+        inline const file_status&
+        status(const path& p) {
+            if (!this->has_status()) {
+                this->_stat.update(p, path_flag::no_follow);
+            }
+            return this->_stat;
+        }
+
+    private:
+
+        inline file_type
+        type(const path& dirname, const directory_entry& entry) {
+            this->_type = entry.type();
+            return entry.has_type()
+                ? entry.type()
+                : this->_stat.update(path(dirname, entry.name()), path_flag::no_follow).type();
+        }
+
+    };
+
+    /**
+    \brief
+    Recursive directory entry input stream that ignores all hidden files
+    during traversal and does not recurse to hidden directories.
+    \ingroup fs
+    */
+    typedef basic_idirtree<ignore_hidden_files, ignore_hidden_dirs> idirtree;
+
+    /// \brief Recursive directory entry input stream iterator.
+    /// \ingroup fs
+    template<class T>
+    using idirtree_iterator = basic_istream_iterator<idirtree, T>;
+
+}
+
+#endif // vim:filetype=cpp

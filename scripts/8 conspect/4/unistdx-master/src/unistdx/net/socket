@@ -1,0 +1,881 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2019, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_NET_SOCKET
+#define UNISTDX_NET_SOCKET
+
+#include <fcntl.h>
+#include <unistd.h>
+
+#include <chrono>
+
+#include <unistdx/bits/macros>
+#include <unistdx/bits/socket>
+#include <unistdx/config>
+#include <unistdx/io/fildes>
+#include <unistdx/net/socket_address>
+
+#if defined(UNISTDX_HAVE_NETINET_TCP_H)
+#include <netinet/tcp.h>
+#endif
+
+namespace sys {
+
+    /**
+    \brief Message header type for sending and receiving low-level socket messages.
+    \see \man{sendmsg,2}, \man{recvmsg,2}
+    */
+    typedef struct ::msghdr message_header;
+
+    /**
+    \brief
+    Message header type for sending and receiving ancillary data through socket.
+    \see \man{sendmsg,2}, \man{recvmsg,2}, \man{cmsg,3}
+    */
+    typedef struct ::cmsghdr cmessage_header;
+
+    #if defined(UNISTDX_HAVE_SCM_CREDENTIALS) || \
+        defined(UNISTDX_HAVE_SO_PEERCRED)
+    /// Alias to \c ucred system type.
+    typedef struct ::ucred user_credentials;
+    #endif
+
+    /// Socket types.
+    enum class socket_type {
+        stream = SOCK_STREAM,
+        datagram = SOCK_DGRAM,
+        raw = SOCK_RAW
+    };
+
+    /// Socket shutdown options.
+    enum class shutdown_flag: int {
+        read = SHUT_RD,
+        write = SHUT_WR,
+        read_write = SHUT_RDWR
+    };
+
+    UNISTDX_FLAGS(shutdown_flag);
+
+    /**
+    \brief Socket wrapper.
+    \date 2018-05-24
+    \ingroup net
+    \details
+    \arg Socket is a file descriptor which is used for communication.
+    \arg Usually, sockets are used for network communication.
+    \arg The socket is non-blocking and automatically closed on child
+    process execution.
+    */
+    class socket: public fildes {
+
+    public:
+        #if defined(UNISTDX_HAVE_TCP_USER_TIMEOUT)
+        /// Clock type used in this class.
+        typedef std::chrono::system_clock clock_type;
+        /// Duration type.
+        typedef clock_type::duration duration;
+        #endif
+        /// Protocol number type.
+        typedef int protocol_type;
+
+        enum class options: int {
+            #if defined(SO_DEBUG)
+            debug=SO_DEBUG,
+            #endif
+            #if defined(SO_REUSEADDR)
+            reuse_address=SO_REUSEADDR,
+            #endif
+            #if defined(SO_TYPE)
+            type=SO_TYPE,
+            #endif
+            #if defined(SO_ERROR)
+            error=SO_ERROR,
+            #endif
+            #if defined(SO_DONTROUTE)
+            do_not_route=SO_DONTROUTE,
+            #endif
+            #if defined(SO_BROADCAST)
+            broadcast=SO_BROADCAST,
+            #endif
+            #if defined(SO_SNDBUF)
+            send_buffer_size=SO_SNDBUF,
+            #endif
+            #if defined(SO_RCVBUF)
+            receive_buffer_size=SO_RCVBUF,
+            #endif
+            #if defined(SO_SNDBUFFORCE)
+            send_buffer_size_force=SO_SNDBUFFORCE,
+            #endif
+            #if defined(SO_RCVBUFFORCE)
+            receive_buffer_size_force=SO_RCVBUFFORCE,
+            #endif
+            #if defined(SO_KEEPALIVE)
+            keep_alive=SO_KEEPALIVE,
+            #endif
+            #if defined(SO_OOBINLINE)
+            inline_out_of_band_data=SO_OOBINLINE,
+            #endif
+            #if defined(SO_NO_CHECK)
+            no_check=SO_NO_CHECK,
+            #endif
+            #if defined(SO_PRIORITY)
+            priority=SO_PRIORITY,
+            #endif
+            #if defined(SO_LINGER)
+            linger=SO_LINGER,
+            #endif
+            #if defined(SO_BSDCOMPAT)
+            bsd_compatibility=SO_BSDCOMPAT,
+            #endif
+            #if defined(SO_REUSEPORT)
+            reuse_port=SO_REUSEPORT,
+            #endif
+            #if defined(SO_PASSCRED)
+            pass_credentials=SO_PASSCRED,
+            #endif
+            #if defined(SO_PEERCRED)
+            peer_credentials=SO_PEERCRED,
+            #endif
+            #if defined(SO_RCVLOWAT)
+            min_receive_bytes=SO_RCVLOWAT,
+            #endif
+            #if defined(SO_SNDLOWAT)
+            min_send_bytes=SO_SNDLOWAT,
+            #endif
+            #if defined(SO_RCVTIMEO)
+            receive_timeout=SO_RCVTIMEO,
+            #endif
+            #if defined(SO_SNDTIMEO)
+            send_timeout=SO_SNDTIMEO,
+            #endif
+        };
+
+        enum class tcp_options: int {
+            #if defined(TCP_NODELAY)
+            no_delay=TCP_NODELAY,
+            #endif
+            #if defined(TCP_MAXSEG)
+            max_segment_size=TCP_MAXSEG,
+            #endif
+            #if defined(TCP_CORK)
+            cork=TCP_CORK,
+            #endif
+            #if defined(TCP_KEEPIDLE)
+            keep_alive_idle_time=TCP_KEEPIDLE,
+            #endif
+            #if defined(TCP_KEEPINTVL)
+            keep_alive_interval=TCP_KEEPINTVL,
+            #endif
+            #if defined(TCP_KEEPCNT)
+            keep_alive_max_probes=TCP_KEEPCNT,
+            #endif
+            #if defined(TCP_SYNCNT)
+            syn_count=TCP_SYNCNT,
+            #endif
+            #if defined(TCP_LINGER2)
+            linger2=TCP_LINGER2,
+            #endif
+            #if defined(TCP_DEFER_ACCEPT)
+            defer_accept=TCP_DEFER_ACCEPT,
+            #endif
+            #if defined(TCP_WINDOW_CLAMP)
+            window_clamp=TCP_WINDOW_CLAMP,
+            #endif
+            #if defined(TCP_INFO)
+            info=TCP_INFO,
+            #endif
+            #if defined(TCP_QUICKACK)
+            quick_ack=TCP_QUICKACK,
+            #endif
+            #if defined(TCP_CONGESTION)
+            congestion=TCP_CONGESTION,
+            #endif
+            #if defined(TCP_MD5SIG)
+            md5_signature=TCP_MD5SIG,
+            #endif
+            #if defined(TCP_COOKIE_TRANSACTIONS)
+            cookie_transactions=TCP_COOKIE_TRANSACTIONS,
+            #endif
+            #if defined(TCP_THIN_LINEAR_TIMEOUTS)
+            thin_linear_timeouts=TCP_THIN_LINEAR_TIMEOUTS,
+            #endif
+            #if defined(TCP_THIN_DUPACK)
+            thin_dupack=TCP_THIN_DUPACK,
+            #endif
+            #if defined(TCP_USER_TIMEOUT)
+            user_timeout=TCP_USER_TIMEOUT,
+            #endif
+            #if defined(TCP_REPAIR)
+            repair=TCP_REPAIR,
+            #endif
+            #if defined(TCP_REPAIR_QUEUE)
+            repair_queue=TCP_REPAIR_QUEUE,
+            #endif
+            #if defined(TCP_QUEUE_SEQ)
+            queue_sequence=TCP_QUEUE_SEQ,
+            #endif
+            #if defined(TCP_REPAIR_OPTIONS)
+            repair_options=TCP_REPAIR_OPTIONS,
+            #endif
+            #if defined(TCP_FASTOPEN)
+            fastopen=TCP_FASTOPEN,
+            #endif
+            #if defined(TCP_TIMESTAMP)
+            timestamp=TCP_TIMESTAMP,
+            #endif
+            #if defined(TCP_NOTSENT_LOWAT)
+            max_unsent_bytes=TCP_NOTSENT_LOWAT,
+            #endif
+            #if defined(TCP_CC_INFO)
+            congestion_control_info=TCP_CC_INFO,
+            #endif
+            #if defined(TCP_SAVE_SYN)
+            save_syn=TCP_SAVE_SYN,
+            #endif
+            #if defined(TCP_SAVED_SYN)
+            saved_syn=TCP_SAVED_SYN,
+            #endif
+            #if defined(TCP_REPAIR_WINDOW)
+            repair_window=TCP_REPAIR_WINDOW,
+            #endif
+            #if defined(TCP_FASTOPEN_CONNECT)
+            fastopen_connect=TCP_FASTOPEN_CONNECT,
+            #endif
+            #if defined(TCP_ULP)
+            ulp=TCP_ULP,
+            #endif
+            #if defined(TCP_MD5SIG_EXT)
+            extended_md5_signature=TCP_MD5SIG_EXT,
+            #endif
+            #if defined(TCP_FASTOPEN_KEY)
+            fastopen_key=TCP_FASTOPEN_KEY,
+            #endif
+            #if defined(TCP_FASTOPEN_NO_COOKIE)
+            fastopen_no_cookie=TCP_FASTOPEN_NO_COOKIE,
+            #endif
+        };
+
+        /// Socket options.
+        /// \deprecated Use \em options instead.
+        enum option: int {
+            reuse_addr = SO_REUSEADDR,
+            keep_alive = SO_KEEPALIVE,
+            /**
+            \brief Enables sending and receiving UID, GID and PID
+            of the process via unix domain socket.
+            \see \man{unix,7}
+            */
+            pass_credentials = SO_PASSCRED,
+        };
+
+        enum class message_flags: int {
+            #if defined(MSG_OOB)
+            out_of_band=MSG_OOB,
+            #endif
+            #if defined(MSG_PEEK)
+            peek=MSG_PEEK,
+            #endif
+            #if defined(MSG_DONTROUTE)
+            do_not_route=MSG_DONTROUTE,
+            #endif
+            #if defined(MSG_CTRUNC)
+            control_truncated=MSG_CTRUNC,
+            #endif
+            #if defined(MSG_PROXY)
+            proxy=MSG_PROXY,
+            #endif
+            #if defined(MSG_TRUNC)
+            truncate=MSG_TRUNC,
+            #endif
+            #if defined(MSG_TRUNC)
+            truncated=MSG_TRUNC,
+            #endif
+            #if defined(MSG_DONTWAIT)
+            do_not_wait=MSG_DONTWAIT,
+            #endif
+            #if defined(MSG_EOR)
+            end_of_record=MSG_EOR,
+            #endif
+            #if defined(MSG_WAITALL)
+            wait_all=MSG_WAITALL,
+            #endif
+            #if defined(MSG_FIN)
+            fin=MSG_FIN,
+            #endif
+            #if defined(MSG_SYN)
+            syn=MSG_SYN,
+            #endif
+            #if defined(MSG_CONFIRM)
+            confirm=MSG_CONFIRM,
+            #endif
+            #if defined(MSG_RST)
+            rst=MSG_RST,
+            #endif
+            #if defined(MSG_ERRQUEUE)
+            error_queue=MSG_ERRQUEUE,
+            #endif
+            #if defined(MSG_NOSIGNAL)
+            no_signal=MSG_NOSIGNAL,
+            #endif
+            #if defined(MSG_MORE)
+            more=MSG_MORE,
+            #endif
+            #if defined(MSG_WAITFORONE)
+            wait_for_one=MSG_WAITFORONE,
+            #endif
+            #if defined(MSG_BATCH)
+            batch=MSG_BATCH,
+            #endif
+            #if defined(MSG_ZEROCOPY)
+            zero_copy=MSG_ZEROCOPY,
+            #endif
+            #if defined(MSG_FASTOPEN)
+            fast_open=MSG_FASTOPEN,
+            #endif
+            #if defined(MSG_CMSG_CLOEXEC)
+            control_message_close_on_exec=MSG_CMSG_CLOEXEC,
+            #endif
+        };
+
+        socket() = default;
+
+        inline
+        socket(const socket& rhs):
+        fildes(rhs) {}
+
+        inline socket&
+        operator=(const socket& rhs) {
+            this->fildes::operator=(rhs);
+            return *this;
+        }
+
+        /// Move-constructor.
+        inline explicit
+        socket(socket&& rhs) noexcept:
+        sys::fildes(std::move(rhs)) {}
+
+        /// Construct the socket from file descriptor rhs.
+        inline explicit
+        socket(fildes&& rhs) noexcept:
+        sys::fildes(std::move(rhs)) {}
+
+        /**
+        \brief Construct the socket and bind on \p bind_addr and listen.
+        \throws bad_call
+        \see \man{socket,2}
+        \deprecated use bind(), listen() instead
+        */
+        UNISTDX_DEPRECATED inline explicit
+        socket(const socket_address_view& bind_addr) {
+            this->bind(bind_addr);
+            this->listen();
+        }
+
+        /**
+        \brief
+        Construct the socket, bind on \p bind_addr and connect
+        to a process listening on \p conn_addr.
+        \throws bad_call
+        \see \man{socket,2}
+        \deprecated use bind(), connect() instead
+        */
+        UNISTDX_DEPRECATED inline
+        socket(const socket_address_view& bind_addr, const socket_address_view& conn_addr) {
+            this->bind(bind_addr);
+            this->connect(conn_addr);
+        }
+
+        /**
+        \brief
+        Construct the socket with protocol family \p family, type \p type
+        and protocol \p proto.
+        \throws bad_call
+        \see \man{socket,2}
+        */
+        explicit socket(
+            socket_address_family family,
+            socket_type type=socket_type::stream,
+            protocol_type proto=0
+        );
+
+        /// Close the socket.
+        inline ~socket() noexcept = default;
+
+        /// Move-assignment.
+        inline socket&
+        operator=(socket&& rhs) {
+            this->swap(rhs);
+            return *this;
+        }
+
+        /**
+        \brief Bind on socket address \p e.
+        \throws bad_call
+        \see \man{bind,2}
+        */
+        inline void bind(const socket_address_view& e) {
+            UNISTDX_CHECK(::bind(this->_fd, e.data(), e.size()));
+        }
+
+        /**
+        \brief Connect to socket address \p e.
+        \throws bad_call if system error occurs, except
+        \c std::errc::operation_in_progress
+        \see \man{connect,2}
+        \see std::errc
+        */
+        inline void connect(const socket_address_view& e) {
+            int ret = ::connect(this->_fd, e.data(), e.size());
+            if (ret == -1 && errno != EINPROGRESS) { throw bad_call(); }
+        }
+
+        /**
+        \brief Listen on previously binded socket address.
+        \throws bad_call
+        \see \man{listen,2}
+        */
+        inline void listen(int max_pending_connections=SOMAXCONN) {
+            UNISTDX_CHECK(::listen(this->_fd, max_pending_connections));
+        }
+
+        /**
+        \brief Accept socket connection.
+        \date 2018-05-24
+        \throws bad_call
+        \see \man{accept4,2}
+        \param[out] client_socket socket that initiated a connection (client)
+        \param[out] client_address socket address of the client
+        \return true if the connection was accepted and more connections might be
+        accepted, false if there are no more connections to be accepted
+        */
+        bool accept(socket& client_socket, socket_address& client_address);
+
+        /**
+        \brief Shutdown communication on the socket, but do not close it.
+        \throws bad_call if system error occurs, except
+        \c std::errc::not_connected and \c std::errc::not_supported
+        \see \man{shutdown,2}
+        \see std::errc
+        */
+        inline void shutdown(shutdown_flag how=shutdown_flag::read_write) {
+            UNISTDX_CHECK(::shutdown(this->_fd, int(how)));
+        }
+
+        /**
+        \brief Set boolean option.
+        \throws bad_call
+        \see \man{setsockopt,2}
+        \deprecated Use \em set instead.
+        */
+        UNISTDX_DEPRECATED inline void
+        setopt(option opt) { int one = 1; set(SOL_SOCKET, opt, one); }
+
+        /**
+        \brief Get socket type.
+        \see \man{getsockopt,2}
+        \see \man{socket,7}
+        \throws bad_call
+        */
+        inline socket_type
+        type() const {
+            int value = 0;
+            socket_length_type n = sizeof(value);
+            UNISTDX_CHECK(::getsockopt(this->_fd, SOL_SOCKET, SO_TYPE, &value, &n));
+            return socket_type(value);
+        }
+
+        /**
+        \brief Set socket option.
+        \see \man{setsockopt,2}
+        \see \man{socket,7}
+        \throws bad_call
+        */
+        template <class T> inline void
+        set(options name, T value) {
+            set(SOL_SOCKET, int(name), value);
+        }
+
+        /**
+        \brief Get socket option.
+        \see \man{setsockopt,2}
+        \see \man{socket,7}
+        \throws bad_call
+        */
+        template <class T> inline T
+        get(options name) const {
+            T value{};
+            socket_length_type size = sizeof(T);
+            UNISTDX_CHECK(::getsockopt(this->_fd, SOL_SOCKET, int(name), &value, &size));
+            return value;
+        }
+
+        /**
+        \brief Set boolean socket option.
+        \see \man{setsockopt,2}
+        \see \man{socket,7}
+        \throws bad_call
+        */
+        inline void
+        set(options name) {
+            int value = 1;
+            set(SOL_SOCKET, int(name), value);
+        }
+
+        /**
+        \brief Set boolean socket option.
+        \see \man{setsockopt,2}
+        \see \man{socket,7}
+        \throws bad_call
+        */
+        inline void
+        unset(options name) {
+            int value = 0;
+            set(SOL_SOCKET, int(name), value);
+        }
+
+        /**
+        \brief Get TCP option.
+        \see \man{setsockopt,2}
+        \see \man{tcp,7}
+        \throws bad_call
+        */
+        template <class T> inline T
+        get(tcp_options name) const {
+            T value{};
+            socket_length_type size = sizeof(T);
+            UNISTDX_CHECK(::getsockopt(this->_fd, IPPROTO_TCP, int(name), &value, &size));
+            return value;
+        }
+
+        /**
+        \brief Get string TCP option.
+        \see \man{setsockopt,2}
+        \see \man{tcp,7}
+        \throws bad_call
+        */
+        inline void
+        get(tcp_options name, char* value, socket_length_type& size) const {
+            UNISTDX_CHECK(::getsockopt(this->_fd, IPPROTO_TCP, int(name), value, &size));
+        }
+
+        /**
+        \brief Set TCP option.
+        \see \man{setsockopt,2}
+        \see \man{tcp,7}
+        \throws bad_call
+        */
+        template <class T> inline void
+        set(tcp_options name, T value) {
+            set(IPPROTO_TCP, int(name), value);
+        }
+
+        /**
+        \brief Set string TCP option.
+        \see \man{setsockopt,2}
+        \see \man{tcp,7}
+        \throws bad_call
+        */
+        inline void
+        set(tcp_options name, const char* value, socket_length_type size) {
+            UNISTDX_CHECK(::setsockopt(this->_fd, IPPROTO_TCP, int(name), value, size));
+        }
+
+        /**
+        \brief Set boolean TCP option.
+        \see \man{setsockopt,2}
+        \see \man{tcp,7}
+        \throws bad_call
+        */
+        inline void
+        set(tcp_options name) {
+            int value = 1;
+            set(IPPROTO_TCP, int(name), value);
+        }
+
+        /**
+        \brief Set boolean TCP option.
+        \see \man{setsockopt,2}
+        \see \man{tcp,7}
+        \throws bad_call
+        */
+        inline void
+        unset(tcp_options name) {
+            int value = 0;
+            set(IPPROTO_TCP, int(name), value);
+        }
+
+        /**
+        \brief Set keep-alive options.
+        \see \man{setsockopt,2}
+        \see \man{tcp,7}
+        \throws bad_call
+        \param[in] max_probes maximum number of keep-alive probes
+        \param[in] idle_time the number of seconds before the first probe is sent
+        \param[in] interval the number of seconds between subsequent probes
+        */
+        inline void
+        set_keep_alive(int max_probes, duration idle_time, duration interval) {
+            using namespace std::chrono;
+            set(tcp_options::keep_alive_max_probes, max_probes);
+            set(tcp_options::keep_alive_idle_time,
+                static_cast<unsigned int>(duration_cast<seconds>(idle_time).count()));
+            set(tcp_options::keep_alive_interval,
+                static_cast<unsigned int>(duration_cast<seconds>(interval).count()));
+        }
+
+        #if defined(UNISTDX_HAVE_TCP_USER_TIMEOUT)
+        /**
+        \brief Set TCP user timeout option (see \rfc{5482}).
+        \throws bad_call
+        \see \man{setsockopt,2}
+        \see \man{tcp,7}
+        */
+        inline void
+        set_user_timeout(duration d) {
+            using namespace std::chrono;
+            const unsigned int ms = duration_cast<milliseconds>(d).count();
+            set(tcp_options::user_timeout, ms);
+        };
+        #endif
+
+        #if defined(UNISTDX_HAVE_SO_PEERCRED)
+        /**
+        \brief
+        Get UID, GID and PID of the process, that is connected
+        to this socket (client).
+        \throws bad_call
+        \see \man{getsockopt,2}
+        \note The method works only for unix domain sockets.
+        */
+        inline user_credentials
+        credentials() const {
+            return get<user_credentials>(options::peer_credentials);
+        }
+        #endif
+
+        /**
+        \brief \copybrief name
+        \see \man{getsockname,2}
+        \details
+        The same as \link name \endlink, but does not throw.
+        */
+        inline socket_address
+        bind_addr() const noexcept {
+            socket_address addr;
+            socket_length_type len = sizeof(socket_address);
+            ::getsockname(this->_fd, addr.get(), &len);
+            return addr;
+        }
+
+        /**
+        \brief Get bound socket address.
+        \throws bad_call
+        \see \man{getsockname,2}
+        */
+        inline socket_address
+        name() const {
+            socket_address addr;
+            socket_length_type len = sizeof(socket_address);
+            UNISTDX_CHECK(::getsockname(this->_fd, addr.get(), &len));
+            return addr;
+        }
+
+        /**
+        \brief Get address of the client, connected to the socket.
+        \throws bad_call
+        \see \man{getpeername,2}
+        */
+        inline socket_address
+        peer_name() const {
+            socket_address addr;
+            socket_length_type len = sizeof(socket_address);
+            UNISTDX_CHECK(::getpeername(this->_fd, addr.get(), &len));
+            return addr;
+        }
+
+        /**
+        \brief Send low-level message \p hdr through the socket.
+        \throws_bad_call_non_blocking
+        \see \man{sendmsg,2}
+        */
+        inline ssize_t
+        send(const message_header& hdr, message_flags flags=message_flags{}) const {
+            ssize_t ret = ::sendmsg(this->_fd, &hdr, int(flags));
+            UNISTDX_CHECK_IO(ret);
+            return ret;
+        }
+
+        /// \deprecated Use send with \em sys::message_flags.
+        UNISTDX_DEPRECATED inline ssize_t
+        send(const message_header& hdr, int flags) const {
+            return this->send(hdr, message_flags(flags));
+        }
+
+        /**
+        \brief Receive low-level message \p hdr over the socket.
+        \throws_bad_call_non_blocking
+        \see \man{recvmsg,2}
+        */
+        inline ssize_t
+        receive(message_header& hdr, message_flags flags=message_flags{}) const {
+            ssize_t ret = ::recvmsg(this->_fd, &hdr, int(flags));
+            UNISTDX_CHECK_IO(ret);
+            return ret;
+        }
+
+        /// \deprecated Use receive with \em sys::message_flags.
+        UNISTDX_DEPRECATED inline ssize_t
+        receive(message_header& hdr, int flags) const {
+            return this->receive(hdr, message_flags(flags));
+        }
+
+        /**
+        \brief
+        Read \p n bytes from the socket and store them in buffer
+        pointed by \p buf.
+        \throws_bad_call_non_blocking
+        \see \man{recv,2}
+        */
+        inline ssize_t
+        receive(void* buf, size_t n, int flags=0) const {
+            ssize_t ret = ::recv(this->_fd, buf, n, flags);
+            UNISTDX_CHECK_IO(ret);
+            return ret;
+        }
+
+        /**
+        \brief
+        Write \p n bytes from buffer pointed by \p buf to the socket.
+        \throws_bad_call_non_blocking
+        \see \man{send,2}
+        */
+        inline ssize_t
+        send(const void* buf, size_t n, int flags=0) const {
+            ssize_t ret = ::send(this->_fd, buf, n, flags);
+            UNISTDX_CHECK_IO(ret);
+            return ret;
+        }
+
+        #if defined(UNISTDX_HAVE_SCM_RIGHTS)
+        /**
+        \brief
+        Send an array of \p n file descriptors pointed by \p data.
+        \throws bad_call
+        \see \man{cmsg,3}
+        \see \man{unix,7}
+        \note The method works only for unix domain sockets.
+        */
+        void
+        send_fds(const fd_type* data, size_t n);
+
+        /**
+        \brief
+        Receive an array of \p n file descriptors pointed by \p data.
+        \throws bad_call
+        \see \man{cmsg,3}
+        \see \man{unix,7}
+        \note The method works only for unix domain sockets.
+        */
+        void
+        receive_fds(fd_type* data, size_t n);
+        #endif
+
+        /// Swap with \p rhs.
+        inline void
+        swap(socket& rhs) {
+            this->fildes::swap(static_cast<fildes&>(rhs));
+        }
+
+        friend std::ostream&
+        operator<<(std::ostream& out, const socket& rhs);
+
+    protected:
+
+        /// Construct the socket with bare file descriptor.
+        inline explicit
+        socket(fd_type sock) noexcept:
+        sys::fildes(sock) {}
+
+    private:
+
+        template <class T> inline void
+        set(int level, int name, T value) {
+            UNISTDX_CHECK(::setsockopt(this->_fd, level, name, &value, sizeof(value)));
+        }
+
+    };
+
+    /// Overload of \link std::swap \endlink for \link socket \endlink.
+    inline void
+    swap(socket& lhs, socket& rhs) {
+        lhs.swap(rhs);
+    }
+
+    /// Print socket file descriptor and status.
+    std::ostream&
+    operator<<(std::ostream& out, const socket& rhs);
+
+    /**
+    \brief
+    Stream buffer traits for \link socket \endlink.
+    \date 2018-05-24
+    \ingroup traits net
+    */
+    template<>
+    struct streambuf_traits<socket> {
+
+        /// Character type.
+        typedef void char_type;
+
+        /**
+        Write \p n bytes from array pointed by \p s to socket \p sink.
+        */
+        inline static std::streamsize
+        write(socket& sink, const char_type* s, std::streamsize n) {
+            return sink.send(s, n);
+        }
+
+        /**
+        Read \p n bytes to array pointed by \p s from socket \p src.
+        */
+        inline static std::streamsize
+        read(socket& src, char_type* s, std::streamsize n) {
+            return src.receive(s, n);
+        }
+
+    };
+
+    UNISTDX_FLAGS(socket::message_flags);
+
+}
+
+#endif // vim:filetype=cpp

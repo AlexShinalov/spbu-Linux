@@ -1,0 +1,84 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_BITS_OPEN_FLAG
+#define UNISTDX_BITS_OPEN_FLAG
+
+#include <fcntl.h>
+#include <unistdx/config>
+#if defined(UNISTDX_HAVE_O_CLOEXEC)
+#define UNISTDX_O_CLOEXEC O_CLOEXEC
+#else
+#define UNISTDX_O_CLOEXEC 0
+#endif
+#if defined(UNISTDX_HAVE_O_RSYNC)
+#define UNISTDX_O_RSYNC O_RSYNC
+#else
+#define UNISTDX_O_RSYNC 0
+#endif
+#if defined(UNISTDX_HAVE_O_DIRECT)
+#define UNISTDX_O_DIRECT O_DIRECT
+#else
+#define UNISTDX_O_DIRECT 0
+#endif
+#if defined(UNISTDX_HAVE_O_DIRECTORY)
+#define UNISTDX_O_DIRECTORY O_DIRECTORY
+#else
+#define UNISTDX_O_DIRECTORY 0
+#endif
+#if defined(UNISTDX_HAVE_O_LARGEFILE)
+#define UNISTDX_O_LARGEFILE O_LARGEFILE
+#else
+#define UNISTDX_O_LARGEFILE 0
+#endif
+#if defined(UNISTDX_HAVE_O_NOATIME)
+#define UNISTDX_O_NOATIME O_NOATIME
+#else
+#define UNISTDX_O_NOATIME 0
+#endif
+#if defined(UNISTDX_HAVE_O_NOFOLLOW)
+#define UNISTDX_O_NOFOLLOW O_NOFOLLOW
+#else
+#define UNISTDX_O_NOFOLLOW 0
+#endif
+#if defined(UNISTDX_HAVE_O_PATH)
+#define UNISTDX_O_PATH O_PATH
+#else
+#define UNISTDX_O_PATH 0
+#endif
+#if defined(UNISTDX_HAVE_O_TMPFILE)
+#define UNISTDX_O_TMPFILE O_TMPFILE
+#else
+#define UNISTDX_O_TMPFILE 0
+#endif
+
+#endif // vim:filetype=cpp

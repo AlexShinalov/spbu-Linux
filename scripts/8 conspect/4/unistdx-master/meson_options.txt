@@ -1,0 +1,4 @@
+option('with_tests', type: 'boolean', value: true, description: 'Build unit tests')
+option('with_site', type: 'boolean', value: false, description: 'Generate web pages')
+option('with_backtrace_on_exception', type: 'boolean', value: false, description: 'Enable stack trace on each exception')
+option('with_libdw', type: 'boolean', value: false, description: 'Link with libdw to translate addresses to source lines in stack traces. If this option is not specified, then libdw is loaded dynamically.')

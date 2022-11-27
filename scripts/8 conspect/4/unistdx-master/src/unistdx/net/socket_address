@@ -1,0 +1,401 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2016, 2017, 2018, 2019, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_NET_SOCKET_ADDRESS
+#define UNISTDX_NET_SOCKET_ADDRESS
+
+#include <sys/types.h>
+#include <netinet/in.h>
+
+#include <functional>
+#include <iosfwd>
+
+#include <unistdx/bits/macros>
+#include <unistdx/config>
+#include <unistdx/net/bit_count>
+#include <unistdx/net/byte_order>
+#include <unistdx/net/bytes>
+#include <unistdx/net/family>
+#include <unistdx/net/ipaddr_traits>
+#include <unistdx/net/ipv4_address>
+#include <unistdx/net/ipv4_socket_address>
+#include <unistdx/net/ipv6_address>
+#include <unistdx/net/ipv6_socket_address>
+#include <unistdx/net/netlink_socket_address>
+#include <unistdx/net/unix_socket_address>
+
+namespace sys {
+
+    /// Socket address type.
+    using socket_address_type = ::sockaddr;
+    /// Socket address length type.
+    using socket_length_type = ::socklen_t;
+    /// Socket port type.
+    using port_type = ::in_port_t;
+
+    template <class T> T& socket_address_reinterpret_cast(socket_address& rhs) noexcept;
+    template <class T> const T& socket_address_reinterpret_cast(const socket_address& rhs) noexcept;
+    template <class T> T& socket_address_cast(socket_address& rhs);
+    template <class T> const T& socket_address_cast(const socket_address& rhs);
+
+    /**
+    \brief Socket address wrapper.
+    \date 2018-05-23
+    \ingroup wrapper net
+    \details
+    This class wraps all socket address types. Socket address is
+    retrieved with \link sockaddr \endlink method and its length
+    with \link sockaddrlen \endlink method.
+    \arg This is variant class, type of which is encoded in address
+    family.
+    */
+    class alignas(std::aligned_union<0,
+                                     ipv4_socket_address,
+                                     ipv6_socket_address,
+                                     unix_socket_address,
+                                     netlink_socket_address>::type)
+    socket_address {
+
+    private:
+        using traits_type = std::char_traits<char>;
+
+    private:
+        char _bytes[sizeof(ipv6_socket_address)] {};
+
+    public:
+
+        socket_address() = default;
+        ~socket_address() = default;
+        socket_address(const socket_address&) = default;
+        socket_address& operator=(const socket_address&) = default;
+        socket_address(socket_address&&) = default;
+        socket_address& operator=(socket_address&&) = default;
+
+        inline socket_address(const ipv4_socket_address& rhs) noexcept {
+            traits_type::copy(this->_bytes, reinterpret_cast<const char*>(&rhs),
+                              sizeof(ipv4_socket_address));
+        }
+
+        inline socket_address(const ipv6_socket_address& rhs) noexcept {
+            traits_type::copy(this->_bytes, reinterpret_cast<const char*>(&rhs),
+                              sizeof(ipv6_socket_address));
+        }
+
+        inline socket_address(const unix_socket_address& rhs) noexcept {
+            traits_type::copy(this->_bytes, reinterpret_cast<const char*>(&rhs),
+                              sizeof(unix_socket_address));
+        }
+
+        #if defined(UNISTDX_HAVE_LINUX_NETLINK_H)
+        inline socket_address(const netlink_socket_address& rhs) noexcept {
+            traits_type::copy(this->_bytes, reinterpret_cast<const char*>(&rhs),
+                              sizeof(netlink_socket_address));
+        }
+        #endif
+
+        /// Construct socket_address from \c sockaddr system type.
+        inline
+        socket_address(const socket_address_type& rhs) noexcept {
+            traits_type::copy(this->_bytes, reinterpret_cast<const char*>(&rhs),
+                              sizeof(socket_address_type));
+        }
+
+        /// Construct socket_address from another one and a new port.
+        inline
+        socket_address(const socket_address &rhs, port_type newport) noexcept {
+            traits_type::copy(this->_bytes, rhs._bytes, sizeof(socket_address));
+            switch (this->family()) {
+                case socket_address_family::ipv4: ref<ipv4_socket_address>().port(newport); break;
+                case socket_address_family::ipv6: ref<ipv6_socket_address>().port(newport); break;
+                default: break;
+            }
+        }
+
+        explicit socket_address(const char* rhs) noexcept;
+
+        /// Compare socket addresses taking into account particular address family.
+        bool operator<(const socket_address& rhs) const noexcept;
+
+        /// \copydoc operator<
+        bool operator==(const socket_address& rhs) const noexcept;
+
+        /// \copydoc operator<
+        inline bool
+        operator>=(const socket_address& rhs) const noexcept {
+            return !this->operator<(rhs);
+        }
+
+        /// \copydoc operator<
+        inline bool
+        operator!=(const socket_address& rhs) const noexcept {
+            return !this->operator==(rhs);
+        }
+
+        /// Returns true, if socket_address has valid address and family.
+        explicit operator bool() const noexcept;
+
+        /// Returns true, if socket_address has either invalid address or invalid family.
+        inline bool operator!() const noexcept { return !this->operator bool(); }
+
+        friend std::ostream&
+        operator<<(std::ostream& out, const socket_address& rhs);
+
+        friend std::istream&
+        operator>>(std::istream& in, socket_address& rhs);
+
+        friend bstream&
+        operator<<(bstream& out, const socket_address& rhs);
+
+        friend bstream&
+        operator>>(bstream& in, socket_address& rhs);
+
+        /// Get socket_address port.
+        /// \deprecated use socket_address_cast<ipv4_socket_address> instead
+        UNISTDX_DEPRECATED inline port_type
+        port() const noexcept {
+            port_type p = 0;
+            switch (family()) {
+                case socket_address_family::ipv4: p = this->ref<ipv4_socket_address>().port(); break;
+                case socket_address_family::ipv6: p = this->ref<ipv6_socket_address>().port(); break;
+                default: break;
+            }
+            return p;
+        }
+
+        /// Get socket_address address family.
+        inline sa_family_type sa_family() const noexcept { return this->ptr<socket_address_type>()->sa_family; }
+
+        /// Get socket_address address family.
+        inline socket_address_family family() const noexcept { return socket_address_family(sa_family()); }
+
+        /// Reset socket_address value to nought.
+        /// \deprecated use clear() instead
+        UNISTDX_DEPRECATED inline void reset() noexcept { clear(); }
+
+        inline void clear() {
+            traits_type::assign(this->_bytes, sizeof(this->_bytes), 0);
+        }
+
+        /// Get IPv4 address.
+        /// \deprecated use socket_address_cast<ipv4_socket_address> instead
+        UNISTDX_DEPRECATED inline ipv4_address addr4() const noexcept { return ptr<ipv4_socket_address>()->address(); }
+
+        /// Get IPv4 port.
+        /// \deprecated use socket_address_cast<ipv4_socket_address> instead
+        UNISTDX_DEPRECATED inline port_type port4() const noexcept { return ptr<ipv4_socket_address>()->port(); }
+
+        /// Get IPv6 address.
+        /// \deprecated use socket_address_cast<ipv4_socket_address> instead
+        UNISTDX_DEPRECATED inline ipv6_address addr6() const noexcept { return ptr<ipv6_socket_address>()->address(); }
+
+        /// Get IPv6 port.
+        /// \deprecated use socket_address_cast<ipv4_socket_address> instead
+        UNISTDX_DEPRECATED inline port_type port6() const noexcept { return ptr<ipv6_socket_address>()->port(); }
+
+        /// Get socket address suitable for passing as an argument to system calls.
+        /// \deprecated use get() instead
+        UNISTDX_DEPRECATED inline socket_address_type* sockaddr() noexcept { return ptr<socket_address_type>(); }
+
+        /// Get socket address suitable for passing as an argument to system calls.
+        /// \deprecated use get() instead
+        UNISTDX_DEPRECATED inline socket_address_type* sockaddr() const noexcept { return const_cast<socket_address_type*>(ptr<socket_address_type>()); }
+
+        /// Get socket address suitable for passing as an argument to system calls.
+        inline socket_address_type* get() noexcept { return ptr<socket_address_type>(); }
+
+        /// Get socket address suitable for passing as an argument to system calls.
+        inline socket_address_type* get() const noexcept { return const_cast<socket_address_type*>(ptr<socket_address_type>()); }
+
+        /**
+        \brief Get socket address length,
+        suitable for passing as an argument to system calls.
+        \deprecated use size() instead
+        */
+        UNISTDX_DEPRECATED inline socket_length_type sockaddrlen() const noexcept { return size(); }
+        socket_length_type size() const noexcept;
+
+        friend struct std::hash<sys::socket_address>;
+        template <class T> friend T& socket_address_cast(socket_address& rhs);
+        template <class T> friend const T& socket_address_cast(const socket_address& rhs);
+        template <class T> friend T& socket_address_reinterpret_cast(socket_address& rhs) noexcept;
+        template <class T> friend const T& socket_address_reinterpret_cast(const socket_address& rhs) noexcept;
+
+    private:
+
+        template <class T> inline T* ptr() noexcept { return reinterpret_cast<T*>(this); }
+        template <class T> inline const T* ptr() const noexcept { return reinterpret_cast<const T*>(this); }
+        template <class T> inline T& ref() noexcept { return *this->ptr<T>(); }
+        template <class T> inline const T& ref() const noexcept { return *this->ptr<T>(); }
+
+    };
+
+    template <class T>
+    T& socket_address_reinterpret_cast(socket_address& rhs) noexcept {
+        return rhs.ref<T>();
+    }
+
+    template <class T>
+    const T& socket_address_reinterpret_cast(const socket_address& rhs) noexcept {
+        return rhs.ref<T>();
+    }
+
+    template <class T>
+    T& socket_address_cast(socket_address& rhs) {
+        if (std::is_same<T,ipv4_socket_address>::value) {
+            if (rhs.family() != socket_address_family::ipv4) {
+                throw std::invalid_argument("socket_address_cast");
+            }
+        }
+        if (std::is_same<T,ipv6_socket_address>::value) {
+            if (rhs.family() != socket_address_family::ipv6) {
+                throw std::invalid_argument("socket_address_cast");
+            }
+        }
+        if (std::is_same<T,unix_socket_address>::value) {
+            if (rhs.family() != socket_address_family::unix) {
+                throw std::invalid_argument("socket_address_cast");
+            }
+        }
+        #if defined(UNISTDX_HAVE_LINUX_NETLINK_H)
+        if (std::is_same<T,netlink_socket_address>::value) {
+            if (rhs.family() != socket_address_family::netlink) {
+                throw std::invalid_argument("socket_address_cast");
+            }
+        }
+        #endif
+        return rhs.ref<T>();
+    }
+
+    template <class T>
+    const T& socket_address_cast(const socket_address& rhs) {
+        if (std::is_same<T,ipv4_socket_address>::value) {
+            if (rhs.family() != socket_address_family::ipv4) {
+                throw std::invalid_argument("socket_address_cast");
+            }
+        }
+        if (std::is_same<T,ipv6_socket_address>::value) {
+            if (rhs.family() != socket_address_family::ipv6) {
+                throw std::invalid_argument("socket_address_cast");
+            }
+        }
+        if (std::is_same<T,unix_socket_address>::value) {
+            if (rhs.family() != socket_address_family::unix) {
+                throw std::invalid_argument("socket_address_cast");
+            }
+        }
+        #if defined(UNISTDX_HAVE_LINUX_NETLINK_H)
+        if (std::is_same<T,netlink_socket_address>::value) {
+            if (rhs.family() != socket_address_family::netlink) {
+                throw std::invalid_argument("socket_address_cast");
+            }
+        }
+        #endif
+        return rhs.ref<T>();
+    }
+
+    /// Print textual representation of the socket_address.
+    std::ostream&
+    operator<<(std::ostream& out, const socket_address& rhs);
+
+    /// Parse textual representation of the socket_address.
+    std::istream&
+    operator>>(std::istream& in, socket_address& rhs);
+
+    /// Put socket_address in binary form.
+    bstream&
+    operator<<(bstream& out, const socket_address& rhs);
+
+    /// Get socket_address in binary form.
+    bstream&
+    operator>>(bstream& in, socket_address& rhs);
+
+    static_assert(sizeof(port_type) == 2, "bad port_type size");
+
+    ipv4_address
+    ipaddr_traits<ipv4_address>::address(const socket_address& rhs) noexcept {
+        return socket_address_reinterpret_cast<ipv4_socket_address>(rhs).address();
+    }
+
+    port_type
+    ipaddr_traits<ipv4_address>::port(const socket_address& rhs) noexcept {
+        return socket_address_reinterpret_cast<ipv4_socket_address>(rhs).port();
+    }
+
+    ipv6_address
+    ipaddr_traits<ipv6_address>::address(const socket_address& rhs) noexcept {
+        return socket_address_reinterpret_cast<ipv6_socket_address>(rhs).address();
+    }
+
+    port_type
+    ipaddr_traits<ipv6_address>::port(const socket_address& rhs) noexcept {
+        return socket_address_reinterpret_cast<ipv6_socket_address>(rhs).port();
+    }
+
+    class socket_address_view {
+
+    private:
+        socket_address_type* _data{};
+        socket_length_type _size{};
+        socket_address_family _family{};
+
+    public:
+
+        template <class T>
+        inline socket_address_view(const T& rhs):
+        _data(rhs.get()), _size(rhs.size()), _family(rhs.family()) {}
+
+        inline socket_address_type* data() const noexcept { return this->_data; }
+        inline socket_length_type size() const noexcept { return this->_size; }
+        inline socket_address_family family() const noexcept { return this->_family; }
+
+    };
+
+}
+
+namespace std {
+
+    /// Specialisation of \link std::hash \endlink for \link sys::socket_address \endlink.
+    template<>
+    struct hash<sys::socket_address> {
+
+        /**
+        \brief Computes hash by XOR-ing hash of the address with port number.
+        \details
+        Depending on the address family, uses hash of either ipv4_address or ipv6_address.
+        */
+        size_t operator()(const sys::socket_address& rhs) const noexcept;
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

@@ -1,0 +1,228 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2020, 2021 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_FS_PATH_VIEW
+#define UNISTDX_FS_PATH_VIEW
+
+#include <unistdx/config>
+
+#include <unistd.h>
+#if defined(UNISTDX_HAVE_MOUNT)
+#include <sys/mount.h>
+#endif
+
+#include <unistdx/base/check>
+#include <unistdx/base/string>
+#include <unistdx/fs/file_attributes>
+#include <unistdx/fs/file_mode>
+#include <unistdx/fs/file_type>
+#include <unistdx/system/call>
+
+namespace sys {
+
+    using uid_type = ::uid_t;
+    using gid_type = ::gid_t;
+    using device_type = ::dev_t;
+
+    enum class mount_flags: int {
+        #if defined(MS_RDONLY)
+        read_only=MS_RDONLY,
+        #endif
+        #if defined(MS_NOSUID)
+        no_set_user_id=MS_NOSUID,
+        #endif
+        #if defined(MS_NODEV)
+        no_dev=MS_NODEV,
+        #endif
+        #if defined(MS_NOEXEC)
+        no_exec=MS_NOEXEC,
+        #endif
+        #if defined(MS_SYNCHRONOUS)
+        synchronous=MS_SYNCHRONOUS,
+        #endif
+        #if defined(MS_REMOUNT)
+        remount=MS_REMOUNT,
+        #endif
+        #if defined(MS_MANDLOCK)
+        mandatory_lock=MS_MANDLOCK,
+        #endif
+        #if defined(MS_DIRSYNC)
+        synchronous_directories=MS_DIRSYNC,
+        #endif
+        #if defined(MS_NOATIME)
+        no_access_time=MS_NOATIME,
+        #endif
+        #if defined(MS_NODIRATIME)
+        no_directory_access_time=MS_NODIRATIME,
+        #endif
+        #if defined(MS_BIND)
+        bind=MS_BIND,
+        #endif
+        #if defined(MS_MOVE)
+        move=MS_MOVE,
+        #endif
+        #if defined(MS_REC)
+        recursive=MS_REC,
+        #endif
+        #if defined(MS_SILENT)
+        silent=MS_SILENT,
+        #endif
+        #if defined(MS_POSIXACL)
+        posix_acl=MS_POSIXACL,
+        #endif
+        #if defined(MS_UNBINDABLE)
+        unbindable=MS_UNBINDABLE,
+        #endif
+        #if defined(MS_PRIVATE)
+        make_private=MS_PRIVATE,
+        #endif
+        #if defined(MS_SLAVE)
+        slave=MS_SLAVE,
+        #endif
+        #if defined(MS_SHARED)
+        shared=MS_SHARED,
+        #endif
+        #if defined(MS_RELATIME)
+        relative_access_time=MS_RELATIME,
+        #endif
+        #if defined(MS_KERNMOUNT)
+        kernel_mount=MS_KERNMOUNT,
+        #endif
+        #if defined(MS_I_VERSION)
+        i_version=MS_I_VERSION,
+        #endif
+        #if defined(MS_STRICTATIME)
+        strict_access_time=MS_STRICTATIME,
+        #endif
+        #if defined(MS_LAZYTIME)
+        lazy_time=MS_LAZYTIME,
+        #endif
+        #if defined(MS_ACTIVE)
+        active=MS_ACTIVE,
+        #endif
+        #if defined(MS_NOUSER)
+        no_user=MS_NOUSER,
+        #endif
+    };
+
+    UNISTDX_FLAGS(mount_flags);
+
+    enum class unmount_flags: int {
+        #if defined(MNT_FORCE)
+        force=MNT_FORCE,
+        #endif
+        #if defined(MNT_DETACH)
+        detach=MNT_DETACH,
+        #endif
+        #if defined(MNT_EXPIRE)
+        expire=MNT_EXPIRE,
+        #endif
+        #if defined(UMOUNT_NOFOLLOW)
+        no_follow=UMOUNT_NOFOLLOW,
+        #endif
+    };
+
+    UNISTDX_FLAGS(unmount_flags);
+
+    class path_view: public c_string {
+
+    public:
+        using c_string::c_string;
+
+        inline operator const_pointer() const noexcept { return this->data(); }
+
+        #if defined(UNISTDX_HAVE_SYS_XATTR_H)
+        string attribute(c_string name,
+                         file_attribute_options f=file_attribute_options{}) const;
+        void attribute(c_string name, const_string value,
+                       file_attribute_flags f1=file_attribute_flags{},
+                       file_attribute_options f=file_attribute_options{});
+        void remove_attribute(c_string name,
+                              file_attribute_options f=file_attribute_options{});
+        file_attributes attributes(file_attribute_options f=file_attribute_options{}) const;
+        #endif
+
+        inline std::errc access(file_mode mode) const noexcept {
+            return std::errc(::access(data(), mode_type{mode}));
+        }
+
+        inline void mode(file_mode mode) { check(::chmod(data(), mode_type{mode})); }
+
+        inline void owner(file_mode mode, uid_type user, gid_type group) {
+            check(::chown(data(), user, group));
+        }
+
+        inline void remove_directory() { check(::rmdir(data())); }
+        inline void remove_file() { check(::unlink(data())); }
+
+        inline void make_directory(file_mode mode) { check(::mkdir(data(), mode_type{mode})); }
+
+        inline void make_file(file_type type, file_mode mode, device_type device={}) {
+            check(::mknod(data(), mode_type{mode}|mode_type(type), device));
+        }
+
+        inline void make_link_from(c_string old) { check(::link(old, data())); }
+        inline void make_symbolik_link_from(c_string old) { check(::symlink(old, data())); }
+
+        #if defined(UNISTDX_HAVE_MOUNT)
+        inline void make_mount_point(c_string source, c_string file_system,
+                                     mount_flags f=mount_flags{}, const void* options=nullptr) {
+            check(::mount(source, data(), file_system, static_cast<unsigned long>(f),
+                          options));
+        }
+
+        inline void make_mount_point(c_string source, mount_flags f,
+                                     const void* options=nullptr) {
+            check(::mount(source, data(), nullptr, static_cast<unsigned long>(f), options));
+        }
+
+        inline void flags(mount_flags f) {
+            check(::mount(nullptr, data(), nullptr, static_cast<unsigned long>(f), nullptr));
+        }
+
+        inline void unmount() { check(::umount(data())); }
+        inline void unmount(unmount_flags f) { check(::umount2(data(), int(f))); }
+        #endif
+
+        inline void set_working_directory() { check(::chdir(data())); }
+
+        #if defined(UNISTDX_HAVE_MOUNT)
+        void set_root(const char* old_name="/.__old__");
+        #endif
+
+    };
+
+    using const_path = path_view;
+
+}
+
+#endif // vim:filetype=cpp

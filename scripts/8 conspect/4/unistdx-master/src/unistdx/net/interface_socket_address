@@ -1,0 +1,165 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_NET_INTERFACE_SOCKET_ADDRESS
+#define UNISTDX_NET_INTERFACE_SOCKET_ADDRESS
+
+#include <unistdx/net/interface_address>
+#include <unistdx/net/socket_address>
+
+namespace sys {
+
+    template <class T>
+    class interface_socket_address: public interface_address<T> {
+
+    public:
+        using typename interface_address<T>::addr_type;
+        using typename interface_address<T>::traits_type;
+        using typename interface_address<T>::rep_type;
+        using typename interface_address<T>::iterator;
+
+    private:
+        port_type _port{};
+
+    public:
+
+        inline interface_socket_address(const addr_type& address,
+                                        const addr_type& netmask,
+                                        port_type port):
+        interface_address<T>(address, netmask), _port(port) {}
+
+        inline interface_socket_address(const addr_type& address,
+                                        prefix_type prefix,
+                                        port_type port):
+        interface_address<T>(address, prefix), _port(port) {}
+
+        interface_socket_address() = default;
+        ~interface_socket_address() = default;
+        interface_socket_address(const interface_socket_address&) = default;
+        interface_socket_address& operator=(const interface_socket_address&) = default;
+        interface_socket_address(interface_socket_address&&) = default;
+        interface_socket_address& operator=(interface_socket_address&&) = default;
+
+        inline ::sys::socket_address socket_address() const {
+            using sa = typename traits_type::socket_address_type;
+            return sa{this->address(), port()};
+        }
+
+        inline port_type port() const noexcept { return this->_port; }
+        inline void port(port_type rhs) noexcept { this->_port = rhs; }
+
+        inline explicit constexpr
+        operator bool() const noexcept {
+            return this->interface_address<T>::operator bool() &&
+                   static_cast<bool>(this->_port);
+        }
+
+        inline constexpr bool
+        operator!() const noexcept {
+            return !this->operator bool();
+        }
+
+        inline constexpr bool
+        operator==(const interface_socket_address& rhs) const noexcept {
+            return this->interface_address<T>::operator==(rhs) &&
+                   this->_port == rhs._port;
+        }
+
+        inline constexpr bool
+        operator!=(const interface_socket_address& rhs) const noexcept {
+            return !this->operator==(rhs);
+        }
+
+        inline constexpr bool
+        operator<(const interface_socket_address& rhs) const noexcept {
+            return std::tie(this->address(), this->netmask(), port()) <
+                   std::tie(rhs.address(), rhs.netmask(), rhs.port());
+        }
+
+        inline friend std::istream&
+        operator>>(std::istream& in, interface_socket_address& rhs) {
+            using Colon = sys::bits::Const_char<':'>;
+            in >> static_cast<interface_address<T>&>(rhs);
+            in >> Colon() >> rhs._port;
+            return in;
+        }
+
+        inline friend bstream&
+        operator<<(bstream& out, const interface_socket_address& rhs) {
+            return out << static_cast<const interface_address<T>&>(rhs) << rhs._port;
+        }
+
+        /// Get interface address in binary form.
+        inline friend bstream&
+        operator>>(bstream& in, interface_socket_address& rhs) {
+            return in >> static_cast<interface_address<T>&>(rhs) >> rhs._port;
+        }
+
+    };
+
+    template <class T> inline std::ostream&
+    operator<<(std::ostream& out, const interface_socket_address<T>& rhs) {
+        return out << rhs.address() << '/' << rhs.netmask().to_prefix()
+            << ':' << rhs.port();
+    }
+
+}
+
+namespace std {
+
+    /// Specialisation of \link std::hash \endlink for
+    /// \link sys::interface_socket_address \endlink.
+    template<class T>
+    struct hash<sys::interface_socket_address<T>>:
+        public std::hash<T>, public std::hash<sys::port_type> {
+
+        /// Hash function return value type.
+        using result_type = size_t;
+        /// Hash function argument type.
+        using argument_type = sys::interface_socket_address<T>;
+
+        /// Compute hash by XOR-ing hashes of the address and netmask.
+        inline result_type
+        operator()(const argument_type& rhs) const noexcept {
+            typedef std::hash<T> addr_hash;
+            typedef std::hash<sys::port_type> port_hash;
+            return
+                addr_hash::operator()(rhs.address()) ^
+                addr_hash::operator()(rhs.netmask()) ^
+                port_hash::operator()(rhs.port());
+        }
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

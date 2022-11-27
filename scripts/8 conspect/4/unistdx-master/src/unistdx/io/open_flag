@@ -1,0 +1,82 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_IO_OPEN_FLAG
+#define UNISTDX_IO_OPEN_FLAG
+
+#include <unistdx/base/flag>
+#include <unistdx/bits/open_flag>
+
+namespace sys {
+
+    /**
+    \brief Flags used when opening file.
+    \date 2018-05-23
+    \ingroup io
+    */
+    enum class open_flag: int {
+        append = O_APPEND,
+        async = O_ASYNC,
+        close_on_exec = UNISTDX_O_CLOEXEC,
+        create = O_CREAT,
+        direct = UNISTDX_O_DIRECT,
+        directory = UNISTDX_O_DIRECTORY,
+        dsync = O_DSYNC,
+        exclude = O_EXCL,
+        large_file = UNISTDX_O_LARGEFILE,
+        no_atime = UNISTDX_O_NOATIME,
+        no_ctty = O_NOCTTY,
+        no_follow = UNISTDX_O_NOFOLLOW,
+        non_blocking = O_NONBLOCK,
+        path = UNISTDX_O_PATH,
+        read_only = O_RDONLY,
+        read_write = O_RDWR,
+        rsync = UNISTDX_O_RSYNC,
+        sync = O_SYNC,
+        tmp_file = UNISTDX_O_TMPFILE,
+        truncate = O_TRUNC,
+        write_only = O_WRONLY,
+    };
+
+    template <>
+    struct is_flag<open_flag>: public std::true_type {};
+
+    /// Check if flag \p rhs is supported by operating system.
+    inline constexpr bool
+    supports(open_flag rhs) noexcept {
+        typedef typename std::underlying_type<open_flag>::type tp;
+        return tp(rhs) != tp(0);
+    }
+
+}
+
+#endif // vim:filetype=cpp

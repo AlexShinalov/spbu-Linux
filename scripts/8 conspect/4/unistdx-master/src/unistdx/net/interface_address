@@ -1,0 +1,306 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_NET_INTERFACE_ADDRESS
+#define UNISTDX_NET_INTERFACE_ADDRESS
+
+#include <unistdx/base/check>
+#include <unistdx/bits/addr_parse>
+#include <unistdx/net/bstream>
+#include <unistdx/net/socket_address>
+#include <unistdx/net/subnet_iterator>
+
+namespace sys {
+
+    /**
+    \brief Network interface address.
+    \date 2018-05-23
+    \ingroup net
+    */
+    template<class Addr>
+    class interface_address {
+
+    public:
+        /// Address type.
+        typedef Addr addr_type;
+        /// Address traits type.
+        typedef ipaddr_traits<Addr> traits_type;
+        /// Address representation type.
+        typedef typename addr_type::rep_type rep_type;
+        /// Address iterator type.
+        typedef subnet_iterator<addr_type> iterator;
+
+    private:
+        addr_type _address;
+        addr_type _netmask;
+
+    public:
+
+        /**
+        Construct interface address from address \p addr and
+        network mask \p netmask.
+        */
+        inline constexpr
+        interface_address(const addr_type& addr, const addr_type& netmask) noexcept:
+        _address(addr), _netmask(netmask)
+        {}
+
+        /**
+        Construct interface address from address \p addr and
+        network prefix \p prefix.
+        */
+        inline constexpr
+        interface_address(const addr_type& addr, const prefix_type prefix) noexcept:
+        _address(addr), _netmask(addr_type::from_prefix(prefix))
+        {}
+
+        inline constexpr
+        interface_address() noexcept = default;
+
+        /// Copy-constructor.
+        inline constexpr
+        interface_address(const interface_address&) noexcept = default;
+
+        /// Move-constructor.
+        inline constexpr
+        interface_address(interface_address&&) noexcept = default;
+
+        /// Assignment.
+        inline interface_address&
+        operator=(const interface_address&) noexcept = default;
+
+        /// Get address.
+        inline constexpr const addr_type&
+        address() const noexcept {
+            return this->_address;
+        }
+
+        /// Get network mask.
+        inline constexpr const addr_type&
+        netmask() const noexcept {
+            return this->_netmask;
+        }
+
+        /// Get network prefix.
+        inline prefix_type
+        prefix() const noexcept {
+            return this->_netmask.to_prefix();
+        }
+
+        /// Get network gateway address.
+        inline constexpr const addr_type&
+        gateway() const noexcept {
+            return addr_type(this->first());
+        }
+
+        /// Get position of interface address in its subnetwork.
+        inline constexpr rep_type
+        position() const noexcept {
+            return this->_address.position(this->_netmask);
+        }
+
+        /// Get iterator to the beginning of the subnetwork.
+        inline constexpr iterator
+        begin() const noexcept {
+            return iterator(this->first());
+        }
+
+        /// Get iterator to this interface address in the subnetwork.
+        inline constexpr iterator
+        middle() const noexcept {
+            return iterator(this->_address);
+        }
+
+        /// Get iterator to the end of the subnetwork.
+        inline constexpr iterator
+        end() const noexcept {
+            return iterator(this->last());
+        }
+
+        /**
+        Return the number of addresses in the subnetwork, including
+        gateway and broadcast addresses.
+        */
+        inline constexpr rep_type
+        count() const noexcept {
+            return this->last() - this->first();
+        }
+
+        /**
+        Returns true, of the subnetwork contains address \p rhs.
+        */
+        inline constexpr bool
+        contains(const addr_type& rhs) const noexcept {
+            return this->contains(to_host_format(rhs.rep()));
+        }
+
+        /// Get the first address in the network (gateway address).
+        inline constexpr rep_type
+        first() const noexcept {
+            return (this->addr_long() & this->mask_long()) + 1;
+        }
+
+        /// Get the last address in the network (broadcast address).
+        inline constexpr rep_type
+        last() const noexcept {
+            return (this->addr_long() & this->mask_long()) +
+                   (~this->mask_long());
+        }
+
+        /// Returns true, if the subnetwork is loopback.
+        inline constexpr bool
+        is_loopback() const noexcept {
+            return this->_address[0] == traits_type::loopback_first_octet &&
+                   this->_netmask == traits_type::loopback_mask();
+        }
+
+        /// Returns true, if the subnetwork is widearea.
+        inline constexpr bool
+        is_widearea() const noexcept {
+            return this->_netmask == traits_type::widearea_mask();
+        }
+
+        /**
+        Returns true, if both address and network mask are valid (non-nought).
+        */
+        inline explicit constexpr
+        operator bool() const noexcept {
+            return static_cast<bool>(this->_address) &&
+                   static_cast<bool>(this->_netmask);
+        }
+
+        /**
+        Returns true, if either address or network mask is invalid (equals nought).
+        */
+        inline constexpr bool
+        operator!() const noexcept {
+            return !this->operator bool();
+        }
+
+        /// Compares addresses and network masks.
+        inline constexpr bool
+        operator==(const interface_address& rhs) const noexcept {
+            return this->_address == rhs._address &&
+                   this->_netmask == rhs._netmask;
+        }
+
+        /// Compares addresses and network masks.
+        inline constexpr bool
+        operator!=(const interface_address& rhs) const noexcept {
+            return !this->operator==(rhs);
+        }
+
+        /// Compares addresses and network masks.
+        inline constexpr bool
+        operator<(const interface_address& rhs) const noexcept {
+            return std::tie(this->_address, this->_netmask) <
+                   std::tie(rhs._address, rhs._netmask);
+        }
+
+        /// Put address and network prefix.
+        inline friend std::ostream&
+        operator<<(std::ostream& out, const interface_address& rhs) {
+            typedef sys::bits::Const_char<'/'> Slash;
+            return out << rhs._address << Slash() << rhs._netmask.to_prefix();
+        }
+
+        /// Get address and network prefix.
+        inline friend std::istream&
+        operator>>(std::istream& in, interface_address& rhs) {
+            typedef sys::bits::Const_char<'/'> Slash;
+            sys::prefix_type prefix = 0;
+            in >> rhs._address >> Slash() >> prefix;
+            rhs._netmask = Addr::from_prefix(prefix);
+            return in;
+        }
+
+        /// Put interface address in binary form.
+        inline friend bstream&
+        operator<<(bstream& out, const interface_address& rhs) {
+            return out << rhs._address << rhs._netmask;
+        }
+
+        /// Get interface address in binary form.
+        inline friend bstream&
+        operator>>(bstream& in, interface_address& rhs) {
+            return in >> rhs._address >> rhs._netmask;
+        }
+
+    private:
+
+        inline constexpr bool
+        contains(const rep_type& a) const noexcept {
+            return this->first() <= a && a < this->last();
+        }
+
+        inline constexpr const rep_type
+        addr_long() const noexcept {
+            return to_host_format(this->_address.rep());
+        }
+
+        inline constexpr const rep_type
+        mask_long() const noexcept {
+            return to_host_format(this->_netmask.rep());
+        }
+
+        template<class X>
+        friend class std::hash;
+
+    };
+
+}
+
+namespace std {
+
+    /// Specialisation of \link std::hash \endlink for \link sys::interface_address \endlink.
+    template<class Addr>
+    struct hash<sys::interface_address<Addr> >: public std::hash<Addr> {
+
+        /// Hash function return value type.
+        typedef size_t result_type;
+        /// Hash function argument type.
+        typedef sys::interface_address<Addr> argument_type;
+
+        /// Compute hash by XOR-ing hashes of the address and netmask.
+        inline result_type
+        operator()(const argument_type& rhs) const noexcept {
+            typedef std::hash<Addr> addr_hash;
+            return
+                addr_hash::operator()(rhs._address) ^
+                addr_hash::operator()(rhs._netmask);
+        }
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

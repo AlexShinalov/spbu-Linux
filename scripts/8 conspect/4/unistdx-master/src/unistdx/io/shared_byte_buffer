@@ -1,0 +1,219 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2021 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_IO_SHARED_BYTE_BUFFER
+#define UNISTDX_IO_SHARED_BYTE_BUFFER
+
+#include <memory>
+
+#include <unistdx/base/byte_buffer>
+#include <unistdx/base/flag>
+#include <unistdx/io/memory_mapping>
+#include <unistdx/ipc/futex>
+#include <unistdx/system/resource>
+
+namespace sys {
+
+    class memory_file_descriptor: public fildes {
+
+    public:
+        using size_type = std::size_t;
+        enum class flag: unsigned int {
+            #if defined(MFD_CLOEXEC)
+            close_on_exec=MFD_CLOEXEC,
+            #endif
+            #if defined(MFD_ALLOW_SEALING)
+            allow_sealing=MFD_ALLOW_SEALING,
+            #endif
+            #if defined(MFD_HUGETLB)
+            huge_page=MFD_HUGETLB,
+            #endif
+        };
+
+    public:
+        inline explicit
+        memory_file_descriptor(c_string name, flag flags=flag{}):
+        fildes{check(::memfd_create(name, static_cast<unsigned int>(flags)))} {}
+
+        inline explicit
+        memory_file_descriptor(c_string name, size_type size, flag flags=flag{}):
+        memory_file_descriptor{name, flags} { truncate(size); }
+
+    };
+
+    UNISTDX_FLAGS(memory_file_descriptor::flag);
+
+    class memory_file_allocator: public byte_buffer::allocator {
+
+    private:
+        fildes _file_descriptor;
+
+    public:
+        inline explicit
+        memory_file_allocator(fildes&& file_descriptor):
+        _file_descriptor(std::move(file_descriptor)) {}
+
+        value_type*
+        reallocate(value_type* data, size_type old_size, size_type new_size) override;
+
+        inline const fildes& file_descriptor() const noexcept {
+            return this->_file_descriptor;
+        }
+
+    };
+
+    template <class ... Args>
+    inline byte_buffer::allocator_ptr make_memory_file_allocator(Args&& ... args) {
+        return byte_buffer::allocator_ptr{
+            new memory_file_allocator{std::forward<Args>(args)...}};
+    }
+
+    struct parent_page {
+        alignas(64) futex mutex{1};
+        alignas(64) futex semaphore{0};
+    };
+
+    struct child_page {
+        alignas(64) futex mutex{1};
+        alignas(64) futex semaphore{0};
+        size_type position = 0;
+        size_type limit = 0;
+        byte_order order = native_byte_order();
+    };
+
+    class shared_byte_buffer: public byte_buffer {
+
+    public:
+        class lock_guard {
+        private:
+            futex& mutex;
+            shared_byte_buffer& buffer;
+        public:
+            inline lock_guard(futex& m, shared_byte_buffer& b):
+            mutex{m}, buffer{b} { mutex.lock(); buffer.copy_in(); }
+            inline ~lock_guard() noexcept { buffer.copy_out(); mutex.unlock(); }
+            lock_guard() = delete;
+            lock_guard(const lock_guard&) = delete;
+            lock_guard& operator=(const lock_guard&) = delete;
+            lock_guard(lock_guard&&) = default;
+            lock_guard& operator=(lock_guard&&) = default;
+        };
+
+    public:
+        struct representation {
+            memory_view<parent_page> parent;
+            memory_view<child_page> child;
+            int data{-1};
+            inline
+            representation(memory_view<parent_page> p, memory_view<child_page> c, int d):
+            parent{p}, child{c}, data{d} {}
+            inline representation() = default;
+            representation(c_string name);
+            void copy_to_environment(c_string name) const;
+        };
+
+    private:
+        memory_view<parent_page> _parent;
+        memory_ptr<child_page> _child{page_flag::read|page_flag::write,
+                                      map_flag::anonymous|map_flag::shared};
+
+    public:
+
+        /// Parent process constructor.
+        inline shared_byte_buffer(memory_view<parent_page> parent, size_type size):
+        byte_buffer{size, make_memory_file_allocator(memory_file_descriptor{"data", size})},
+        _parent{parent} { copy_out(); }
+
+        /// Child process constructor.
+        inline shared_byte_buffer(memory_view<parent_page> parent,
+                                  memory_view<child_page> child,
+                                  fildes&& data):
+        shared_byte_buffer{parent, child, data, size_t(data.status().size())} {}
+
+        /// Child process constructor from environment variable created by copy_to_environment.
+        inline explicit shared_byte_buffer(representation fds):
+        shared_byte_buffer{fds.parent, fds.child, fildes{fds.data}} {}
+
+        inline const parent_page* parent() const noexcept { return this->_parent.get(); }
+        inline const child_page* child() const noexcept { return this->_child.get(); }
+        inline parent_page* parent() noexcept { return this->_parent.get(); }
+        inline child_page* child() noexcept { return this->_child.get(); }
+
+        inline lock_guard guard() { return {this->_child->mutex, *this}; }
+
+        inline const fildes& data_file_descriptor() const noexcept {
+            auto a = reinterpret_cast<const memory_file_allocator*>(get_allocator());
+            return a->file_descriptor();
+        }
+
+        inline representation get_representation() const noexcept {
+            return {this->_parent, this->_child.view(), data_file_descriptor().get()};
+        }
+
+        inline static memory_ptr<parent_page> make_parent_page(memory_view<parent_page> m) {
+            return memory_ptr<parent_page>{m};
+        }
+
+        inline static memory_ptr<parent_page> make_parent_page() {
+            return memory_ptr<parent_page>{page_flag::read|page_flag::write,
+                                           map_flag::anonymous|map_flag::shared};
+        }
+
+        inline void copy_in() {
+            auto a = reinterpret_cast<memory_file_allocator*>(get_allocator());
+            const auto new_size = a->file_descriptor().status().size();
+            this->_data = a->memory_file_allocator::reallocate(
+                this->_data, this->_size, new_size);
+            this->_size = new_size;
+            this->_position = std::min(this->_child->position, this->_size);
+            this->_limit = std::min(this->_child->limit, this->_size);
+            this->_order = this->_child->order;
+        }
+
+        inline void copy_out() noexcept {
+            this->_child->position = this->_position;
+            this->_child->limit = this->_limit;
+            this->_child->order = this->_order;
+        }
+
+    private:
+        inline shared_byte_buffer(memory_view<parent_page> parent,
+                                  memory_view<child_page> child,
+                                  fildes& data, size_type size):
+        byte_buffer{size, make_memory_file_allocator(std::move(data))},
+        _parent{parent}, _child{child} {}
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

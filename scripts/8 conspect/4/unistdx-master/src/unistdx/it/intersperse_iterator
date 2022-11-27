@@ -1,0 +1,157 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_IT_INTERSPERSE_ITERATOR
+#define UNISTDX_IT_INTERSPERSE_ITERATOR
+
+#include <iterator>
+
+namespace sys {
+
+    namespace bits {
+
+        typedef std::iterator<std::output_iterator_tag, void, void, void, void>
+            intersperse_iterator_base;
+
+    }
+
+    /**
+    \brief Iterator that intersperses output values by specified delimiter.
+    \date 2018-05-22
+    \ingroup iter
+    \tparam T element type
+    \tparam Delim delimiter type
+    \tparam Ch character type
+    \tparam Tr character traits type
+    \details
+    \arg The type of delimiter can be set via template parameter.
+    */
+    template <class T, class Delim=const char*, class Ch=char, class Tr=
+                  std::char_traits<Ch> >
+    class intersperse_iterator: public bits::intersperse_iterator_base {
+
+    private:
+        typedef bits::intersperse_iterator_base base_type;
+
+    public:
+        using typename base_type::iterator_category;
+        using typename base_type::value_type;
+        using typename base_type::pointer;
+        using typename base_type::reference;
+        using typename base_type::difference_type;
+
+    public:
+        /// Object type.
+        typedef T object_type;
+        /// Delimiter type.
+        typedef Delim delim_type;
+        /// Character type.
+        typedef Ch char_type;
+        /// Character traits type.
+        typedef Tr traits_type;
+        /// Output stream type.
+        typedef std::basic_ostream<Ch,Tr> ostream_type;
+
+    private:
+        ostream_type* ostr;
+        delim_type delim = nullptr;
+        bool first = true;
+
+    public:
+
+        /**
+        Construct intersperse iterator with output stream \p s and
+        delimiter \p delimiter.
+        */
+        inline explicit constexpr
+        intersperse_iterator(ostream_type& s, delim_type delimiter=nullptr):
+        ostr(&s), delim(delimiter) {}
+
+        inline constexpr
+        intersperse_iterator() = default;
+
+        inline
+        ~intersperse_iterator() = default;
+
+        /// Copy-constructor.
+        inline constexpr
+        intersperse_iterator(const intersperse_iterator&) = default;
+
+        /// Move-constructor.
+        inline intersperse_iterator(intersperse_iterator&& rhs):
+        ostr(rhs.ostr), delim(rhs.delim), first(rhs.first) {
+            rhs.ostr = nullptr;
+        }
+
+        /// Assignment operator.
+        inline intersperse_iterator&
+        operator=(const intersperse_iterator&) = default;
+
+        /// Insert object \p value in the stream.
+        inline intersperse_iterator&
+        operator=(const object_type& value) {
+            if (ostr) {
+                if (delim != 0 && !first) {
+                    *ostr << delim;
+                }
+                *ostr << value;
+                if (first) {
+                    first = false;
+                }
+            }
+            return *this;
+        }
+
+        /// Does nothing.
+        inline intersperse_iterator&
+        operator*() {
+            return *this;
+        }
+
+        /// Does nothing.
+        inline intersperse_iterator&
+        operator++() {
+            return *this;
+        }
+
+        /// Does nothing.
+        inline intersperse_iterator&
+        operator++(int) {
+            return *this;
+        }
+
+    };
+
+
+}
+
+#endif // vim:filetype=cpp

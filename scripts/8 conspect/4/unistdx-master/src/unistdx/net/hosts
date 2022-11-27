@@ -1,0 +1,296 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_NET_HOSTS
+#define UNISTDX_NET_HOSTS
+
+#include <unistdx/base/flag>
+#include <unistdx/base/string>
+#include <unistdx/config>
+#include <unistdx/net/family>
+#include <unistdx/net/socket>
+#include <unistdx/net/socket_address>
+
+#if defined(UNISTDX_HAVE_NETDB_H)
+#include <netdb.h>
+#endif
+
+namespace sys {
+
+    enum class host_errc: int {
+        #if defined(EAI_BADFLAGS)
+        bad_flags=EAI_BADFLAGS,
+        #endif
+        #if defined(EAI_NONAME)
+        no_name=EAI_NONAME,
+        #endif
+        #if defined(EAI_AGAIN)
+        again=EAI_AGAIN,
+        #endif
+        #if defined(EAI_FAIL)
+        fail=EAI_FAIL,
+        #endif
+        #if defined(EAI_FAMILY)
+        family=EAI_FAMILY,
+        #endif
+        #if defined(EAI_SOCKTYPE)
+        socket_type=EAI_SOCKTYPE,
+        #endif
+        #if defined(EAI_SERVICE)
+        service=EAI_SERVICE,
+        #endif
+        #if defined(EAI_MEMORY)
+        memory=EAI_MEMORY,
+        #endif
+        #if defined(EAI_SYSTEM)
+        system=EAI_SYSTEM,
+        #endif
+        #if defined(EAI_OVERFLOW)
+        overflow=EAI_OVERFLOW,
+        #endif
+        #if defined(EAI_NODATA)
+        no_data=EAI_NODATA,
+        #endif
+        #if defined(EAI_ADDRFAMILY)
+        address_family=EAI_ADDRFAMILY,
+        #endif
+        #if defined(EAI_INPROGRESS)
+        in_progress=EAI_INPROGRESS,
+        #endif
+        #if defined(EAI_CANCELED)
+        canceled=EAI_CANCELED,
+        #endif
+        #if defined(EAI_NOTCANCELED)
+        not_canceled=EAI_NOTCANCELED,
+        #endif
+        #if defined(EAI_ALLDONE)
+        all_done=EAI_ALLDONE,
+        #endif
+        #if defined(EAI_INTR)
+        interrupted=EAI_INTR,
+        #endif
+        #if defined(EAI_IDN_ENCODE)
+        idn_encode=EAI_IDN_ENCODE,
+        #endif
+    };
+
+    class host_error_category: public std::error_category {
+    public:
+        inline const char* name() const noexcept override { return "host"; }
+        std::string message(int ev) const noexcept override;
+    };
+
+    extern host_error_category host_category;
+
+    inline std::error_condition
+    make_error_condition(host_errc e) noexcept {
+        return std::error_condition(static_cast<int>(e), host_category);
+    }
+
+    #define UNISTDX_GAI_CHECK(ret) \
+        if (ret == -1) { \
+            throw std::system_error(ret, host_category); \
+        }
+
+    enum class host_flags: int {
+        #if defined(AI_PASSIVE)
+        passive=AI_PASSIVE,
+        #endif
+        #if defined(AI_CANONNAME)
+        canonical_name=AI_CANONNAME,
+        #endif
+        #if defined(AI_NUMERICHOST)
+        numeric_host=AI_NUMERICHOST,
+        #endif
+        #if defined(AI_V4MAPPED)
+        v4_mapped=AI_V4MAPPED,
+        #endif
+        #if defined(AI_ALL)
+        all=AI_ALL,
+        #endif
+        #if defined(AI_ADDRCONFIG)
+        address_config=AI_ADDRCONFIG,
+        #endif
+        #if defined(AI_IDN)
+        idn=AI_IDN,
+        #endif
+        #if defined(AI_CANONIDN)
+        idn_canonical=AI_CANONIDN,
+        #endif
+        #if defined(AI_NUMERICSERV)
+        numeric_service=AI_NUMERICSERV,
+        #endif
+    };
+
+    UNISTDX_FLAGS(host_flags);
+
+    class host: public ::addrinfo {
+
+    public:
+        inline host() noexcept: ::addrinfo{} {}
+        ~host() = default;
+        host(const host&) = default;
+        host& operator=(const host&) = default;
+        host(host&&) = default;
+        host& operator=(host&&) = default;
+        inline socket_address_family family() const noexcept { return socket_address_family(this->ai_family); }
+        inline void family(socket_address_family rhs) noexcept { this->ai_family = int(rhs); }
+        inline ::sys::socket_type socket_type() const noexcept { return ::sys::socket_type(this->ai_socktype); }
+        inline void socket_type(::sys::socket_type rhs) noexcept { this->ai_socktype = int(rhs); }
+        inline int protocol() const noexcept { return this->ai_protocol; }
+        inline void protocol(int rhs) noexcept { this->ai_protocol = rhs; }
+        inline host_flags flags() const noexcept { return host_flags(this->ai_flags); }
+        inline void flags(host_flags rhs) noexcept { this->ai_flags = int(rhs); }
+        inline c_string canonical_name() const noexcept { return this->ai_canonname; }
+        inline ::sys::socket socket() const { return ::sys::socket(family(), socket_type(), protocol()); }
+        inline socket_length_type socket_address_size() const noexcept { return this->ai_addrlen; }
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wcast-align"
+        inline const ::sys::socket_address& socket_address() const noexcept {
+            return reinterpret_cast<const ::sys::socket_address&>(*this->ai_addr);
+        }
+        #pragma GCC diagnostic pop
+        inline host* next() const noexcept { return static_cast<host*>(this->ai_next); }
+
+    };
+
+    class host_iterator {
+
+    public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = host;
+        using pointer = host*;
+        using reference = host&;
+        using difference_type = std::ptrdiff_t;
+
+    private:
+        using const_pointer = const host*;
+        using const_reference = const host&;
+        using size_type = size_t;
+
+    private:
+        pointer _ptr{};
+
+    public:
+        inline explicit
+        host_iterator(pointer begin) noexcept:
+        _ptr(begin) {}
+
+        host_iterator() noexcept = default;
+        ~host_iterator() noexcept = default;
+        host_iterator(const host_iterator&) = default;
+        host_iterator& operator=(const host_iterator&) = default;
+        host_iterator(host_iterator&&) = default;
+        host_iterator& operator=(host_iterator&&) = default;
+
+        inline bool
+        operator==(const host_iterator& rhs) const noexcept {
+            return this->_ptr == rhs._ptr;
+        }
+
+        inline bool
+        operator!=(const host_iterator& rhs) const noexcept {
+            return !this->operator==(rhs);
+        }
+
+        inline const_reference operator*() const noexcept { return *this->_ptr; }
+        inline reference operator*() noexcept { return *this->_ptr; }
+        inline const_pointer operator->() const noexcept { return this->_ptr; }
+        inline pointer operator->() noexcept { return this->_ptr; }
+
+        /// Increment.
+        inline host_iterator&
+        operator++() noexcept {
+            this->_ptr = this->_ptr->next();
+            return *this;
+        }
+
+        inline host_iterator
+        operator++(int) noexcept {
+            host_iterator tmp(*this);
+            ++*this;
+            return tmp;
+        }
+
+    };
+
+    class hosts: public host {
+
+    public:
+
+        hosts() noexcept = default;
+        inline explicit hosts(c_string node, c_string service=nullptr) { update(node,service); }
+        inline ~hosts() noexcept { ::freeaddrinfo(this->ai_next); }
+
+        inline void update(c_string node, c_string service=nullptr) {
+            if (next()) { ::freeaddrinfo(this->ai_next);  this->ai_next = nullptr; }
+            UNISTDX_GAI_CHECK(::getaddrinfo(node, service, this, &this->ai_next));
+        }
+
+        inline host_iterator begin() const noexcept { return host_iterator(next()); }
+        inline host_iterator end() const noexcept { return host_iterator(); }
+
+    };
+
+    enum class host_name_flags: int {
+        #if defined(NI_NUMERICHOST)
+        numeric_host=NI_NUMERICHOST,
+        #endif
+        #if defined(NI_NUMERICSERV)
+        numeric_service=NI_NUMERICSERV,
+        #endif
+        #if defined(NI_NOFQDN)
+        no_fqdn=NI_NOFQDN,
+        #endif
+        #if defined(NI_NAMEREQD)
+        name_required=NI_NAMEREQD,
+        #endif
+        #if defined(NI_DGRAM)
+        datagram=NI_DGRAM,
+        #endif
+        #if defined(NI_IDN)
+        idn=NI_IDN,
+        #endif
+    };
+
+    UNISTDX_FLAGS(host_name_flags);
+
+    string host_name(const socket_address& address, host_name_flags flags=host_name_flags{});
+    string service_name(port_type port, host_name_flags flags=host_name_flags{});
+
+}
+
+namespace std {
+    template<> struct is_error_condition_enum<::sys::host_errc>: true_type {};
+}
+
+#endif // vim:filetype=cpp

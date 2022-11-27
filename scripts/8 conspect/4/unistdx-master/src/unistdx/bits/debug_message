@@ -1,0 +1,124 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_BITS_DEBUG_MESSAGE
+#define UNISTDX_BITS_DEBUG_MESSAGE
+
+#include <iostream>
+#include <sstream>
+
+#include <unistdx/base/contracts>
+
+namespace sys {
+
+    class debug_message {
+
+    public:
+
+        template<class ... Args>
+        explicit
+        debug_message(const char* name, const char* fmt, const Args& ... tokens):
+        debug_message(name, '_', fmt, tokens ...)
+        {}
+
+        template<class ... Args>
+        explicit
+        debug_message(
+            const char* name,
+            char spec,
+            const char* fmt,
+            const Args& ... tokens
+        ):
+        _spec(spec) {
+            UNISTDX_PRECONDITION(name);
+            UNISTDX_PRECONDITION(fmt);
+            this->write_name(name);
+            this->format_msg(fmt, tokens ...);
+        }
+
+        ~debug_message() {
+            this->_str << '\n';
+            std::clog << this->_str.str();
+        }
+
+        template<class T>
+        std::ostream&
+        operator<<(const T& rhs) {
+            return this->_str << rhs;
+        }
+
+        inline std::ostream&
+        operator<<(std::ostream& (*rhs)(std::ostream&)) {
+            return this->_str << rhs;
+        }
+
+        inline std::ostream&
+        out() noexcept {
+            return this->_str;
+        }
+
+    private:
+
+        inline void
+        format_msg(const char* s) {
+            this->_str << s;
+        }
+
+        template<class T, class ... Args>
+        void
+        format_msg(const char* s, const T& value, const Args& ... args) {
+            const char* olds = s;
+            while (*s && *s != this->_spec) {
+                ++s;
+            }
+            this->_str.rdbuf()->sputn(olds, s - olds);
+            this->_str << value;
+            if (*s) {
+                this->format_msg(++s, args ...);
+            }
+        }
+
+        inline void
+        write_name(const char* name) {
+            this->_str.width(10);
+            this->_str.setf(std::ios::right, std::ios::adjustfield);
+            this->_str << name << ": ";
+        }
+
+        std::stringstream _str;
+        char _spec = '_';
+
+    };
+
+}
+
+#endif // vim:filetype=cpp

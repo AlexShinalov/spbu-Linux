@@ -1,0 +1,209 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_FS_FILE_MODE
+#define UNISTDX_FS_FILE_MODE
+
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#include <iosfwd>
+
+namespace sys {
+
+    /**
+    \brief
+    Alias for system file mode type \c mode_t.
+    \date 2018-05-21
+    */
+    typedef ::mode_t mode_type;
+
+    /**
+    \brief File mode wrapper.
+    \date 2018-05-25
+    \ingroup wrapper fs
+    \details
+    A class that gives access to file mode bits via its methods.
+    */
+    class file_mode {
+
+    private:
+        mode_type _mode = 0;
+
+    public:
+        /// A mask with special, user, group and other bits set.
+        static const mode_type mode_mask = 07777;
+        /// A mask with user, group and other bits set.
+        static const mode_type perm_mask = 0777;
+        /// A mask with file type bits set.
+        static const mode_type type_mask = S_IFMT;
+
+        /// File mode bits.
+        enum mask_type {
+            specialbits = S_ISUID | S_ISGID | S_ISVTX,
+            userbits = S_IRWXU,
+            groupbits = S_IRWXG,
+            otherbits = S_IRWXO,
+            user_rwx = S_IRWXU,
+            user_rw = S_IRUSR | S_IWUSR,
+            user_r = S_IRUSR,
+            user_w = S_IWUSR,
+            user_x = S_IXUSR,
+            group_rwx = S_IRWXG,
+            group_rw = S_IRGRP | S_IWGRP,
+            group_r = S_IRGRP,
+            group_w = S_IWGRP,
+            group_x = S_IXGRP,
+            other_rwx = S_IRWXO,
+            other_rw = S_IROTH | S_IWOTH,
+            other_r = S_IROTH,
+            other_w = S_IWOTH,
+            other_x = S_IXOTH,
+            setuid = S_ISUID,
+            setgid = S_ISGID,
+            sticky = S_ISVTX
+        };
+
+        file_mode() = default;
+
+        ~file_mode() = default;
+
+        /// Construct file mode from \c mode_t system type.
+        inline
+        file_mode(mode_type rhs) noexcept:
+        _mode(rhs)
+        {}
+
+        /// Copy-constructor.
+        inline
+        file_mode(const file_mode& rhs) noexcept = default;
+
+        /// Automatically cast to \c mode_t system type.
+        inline
+        operator mode_type&() noexcept {
+            return this->_mode;
+        }
+
+        /// Automatically cast to \c mode_t system type.
+        inline
+        operator mode_type() const noexcept {
+            return this->_mode;
+        }
+
+        /// Assignment.
+        inline file_mode&
+        operator=(const file_mode&) = default;
+
+        /// Assignment.
+        inline file_mode&
+        operator=(mode_type rhs) noexcept {
+            this->_mode = rhs;
+            return *this;
+        }
+
+        /// Get file mode.
+        inline mode_type
+        mode() const noexcept {
+            return this->_mode;
+        }
+
+        /// Set file mode bits described by mask \p mask.
+        inline mode_type
+        mode(mode_type mask) const noexcept {
+            return this->_mode & mask;
+        }
+
+        /// Get special bits.
+        inline mode_type
+        special() const noexcept {
+            return this->mode(specialbits);
+        }
+
+        /// Get user bits.
+        inline mode_type
+        user() const noexcept {
+            return this->mode(userbits);
+        }
+
+        /// Get group bits.
+        inline mode_type
+        group() const noexcept {
+            return this->mode(groupbits);
+        }
+
+        /// Get other bits.
+        inline mode_type
+        other() const noexcept {
+            return this->mode(otherbits);
+        }
+
+        /// Comparison.
+        inline bool
+        operator==(const file_mode& rhs) const noexcept {
+            return this->_mode == rhs._mode;
+        }
+
+        /// Comparison.
+        inline bool
+        operator!=(const file_mode& rhs) const noexcept {
+            return !this->operator==(rhs);
+        }
+
+        /// Comparison.
+        inline bool
+        operator==(const mode_type& rhs) const noexcept {
+            return this->_mode == rhs;
+        }
+
+        /// Comparison.
+        inline bool
+        operator!=(const mode_type& rhs) const noexcept {
+            return this->_mode != rhs;
+        }
+
+        friend std::ostream&
+        operator<<(std::ostream& out, const file_mode& rhs);
+
+    };
+
+    /**
+    \brief Print file mode bits in symbolic form.
+    \details
+    The format is similar to \man{ls,1} command, but
+    special bits are encoded by individual characters.
+    */
+    std::ostream&
+    operator<<(std::ostream& out, const file_mode& rhs);
+
+}
+
+#endif // vim:filetype=cpp

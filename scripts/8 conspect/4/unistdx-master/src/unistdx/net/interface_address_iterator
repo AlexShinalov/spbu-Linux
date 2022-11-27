@@ -1,0 +1,155 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2016, 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_NET_INTERFACE_ADDRESS_ITERATOR
+#define UNISTDX_NET_INTERFACE_ADDRESS_ITERATOR
+
+#include <unistdx/bits/interface_addresses>
+
+namespace sys {
+
+    /// Alias to \c ifaddrs system type.
+    typedef struct ::ifaddrs ifaddrs_type;
+
+    /**
+    \brief Iterator for interface addresses of the computer.
+    \date 2018-05-23
+    \ingroup iter net
+    \see \man{getifaddrs,3}
+    \deprecated Use netlink wrappers instead
+    */
+    class interface_address_iterator:
+        public std::iterator<std::input_iterator_tag, ifaddrs_type> {
+
+    private:
+        typedef typename std::iterator<std::input_iterator_tag, ifaddrs_type>
+            base_type;
+
+    public:
+        using typename base_type::iterator_category;
+        using typename base_type::value_type;
+        using typename base_type::pointer;
+        using typename base_type::reference;
+        using typename base_type::difference_type;
+
+    private:
+        typedef const ifaddrs_type* const_pointer;
+        typedef const ifaddrs_type& const_reference;
+
+    private:
+        pointer _ifa = nullptr;
+
+    public:
+
+        /**
+        Construct interface address iterator from the pointer to
+        \c ifaddrs system type.
+        */
+        inline explicit constexpr
+        interface_address_iterator(pointer rhs) noexcept:
+        _ifa(rhs) {}
+
+        inline constexpr
+        interface_address_iterator() noexcept = default;
+
+        inline
+        ~interface_address_iterator() = default;
+
+        /// Copy-constructor.
+        inline constexpr
+        interface_address_iterator(const interface_address_iterator&) noexcept = default;
+
+        /// Assignment.
+        inline interface_address_iterator&
+        operator=(const interface_address_iterator&) noexcept = default;
+
+        /// Compare \c ifaddrs pointers.
+        inline constexpr bool
+        operator==(const interface_address_iterator& rhs) const noexcept {
+            return this->_ifa == rhs._ifa;
+        }
+
+        /// Compare \c ifaddrs pointers.
+        inline constexpr bool
+        operator!=(const interface_address_iterator& rhs) const noexcept {
+            return !this->operator==(rhs);
+        }
+
+        /// Dereference.
+        inline reference
+        operator*() noexcept {
+            return *this->_ifa;
+        }
+
+        /// Dereference.
+        inline constexpr const_reference
+        operator*() const noexcept {
+            return *this->_ifa;
+        }
+
+        /// Access object by pointer.
+        inline pointer
+        operator->() noexcept {
+            return this->_ifa;
+        }
+
+        /// Access object by pointer.
+        inline constexpr const_pointer
+        operator->() const noexcept {
+            return this->_ifa;
+        }
+
+        /// Increment.
+        inline interface_address_iterator&
+        operator++() noexcept {
+            this->next(); return *this;
+        }
+
+        /// Post-increment.
+        inline interface_address_iterator
+        operator++(int) noexcept {
+            interface_address_iterator tmp(*this); this->next(); return tmp;
+        }
+
+    private:
+
+        inline void
+        next() noexcept {
+            this->_ifa = this->_ifa->ifa_next;
+        }
+
+    };
+
+
+}
+
+#endif // vim:filetype=cpp

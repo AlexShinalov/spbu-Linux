@@ -1,0 +1,264 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2017, 2018, 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_IO_EPOLL_EVENT
+#define UNISTDX_IO_EPOLL_EVENT
+
+#include <iosfwd>
+#include <type_traits>
+
+#include <unistdx/config>
+#if !defined(UNISTDX_HAVE_SYS_EPOLL_H)
+#error epoll.h not found
+#endif
+
+#include <sys/epoll.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
+#include <unistdx/io/fd_type>
+
+namespace sys {
+
+    /// File descriptor event base class.
+    typedef struct ::epoll_event poll_event_base;
+
+    /// \brief Input/output events.
+    /// \ingroup io
+    enum class event : decltype(poll_event_base::events) {
+        in = EPOLLIN,
+        out = EPOLLOUT,
+        hup = EPOLLHUP | EPOLLRDHUP,
+        err = EPOLLERR,
+        inout = EPOLLIN | EPOLLOUT,
+        def = EPOLLRDHUP | EPOLLET
+    };
+
+    #define MAKE_BOOL_OP(op, A, B) \
+    inline bool \
+    operator op(A a, B b) noexcept { \
+        typedef std::underlying_type<event>::type tp; \
+        return tp(a) op tp(b); \
+    }
+
+    #define MAKE_BINARY_OP(op, A, B) \
+    inline event \
+    operator op(A a, B b) noexcept { \
+        typedef std::underlying_type<event>::type tp; \
+        return event(tp(a) op tp(b)); \
+    }
+
+    #define MAKE_UNARY_OP(op) \
+    inline event \
+    operator op(event a) noexcept { \
+        typedef std::underlying_type<event>::type tp; \
+        return event(op tp(a)); \
+    }
+
+    /// \{
+    MAKE_BINARY_OP(|, event, event)
+    MAKE_BINARY_OP(|, decltype(poll_event_base::events), event)
+    MAKE_BINARY_OP(|, event, decltype(poll_event_base::events))
+    MAKE_BINARY_OP(&, event, event)
+    MAKE_BINARY_OP(&, event, decltype(poll_event_base::events))
+    MAKE_BINARY_OP(&, decltype(poll_event_base::events), event)
+    MAKE_BOOL_OP(==, decltype(poll_event_base::events), event)
+    MAKE_BOOL_OP(==, event, decltype(poll_event_base::events))
+    MAKE_BOOL_OP(!=, decltype(poll_event_base::events), event)
+    MAKE_BOOL_OP(!=, event, decltype(poll_event_base::events))
+    MAKE_UNARY_OP(~)
+    /// \}
+
+    #undef MAKE_BINARY_OP
+    #undef MAKE_UNARY_OP
+
+    /**
+    \brief
+    File descriptor event wrapper for \link event_poller \endlink.
+    \date 2018-05-22
+    \ingroup wrapper io
+    */
+    class epoll_event: public poll_event_base {
+
+    private:
+        typedef decltype (poll_event_base::events) E;
+
+    public:
+
+        inline
+        epoll_event() noexcept:
+        epoll_event(-1, event(0))
+        {}
+
+        /// Construct object from file descriptor \p f and event mask \p ev.
+        inline
+        epoll_event(fd_type f, event ev) noexcept:
+        poll_event_base{} {
+            this->poll_event_base::events = E(ev | event::def);
+            this->poll_event_base::data.fd = f;
+        }
+
+        ~epoll_event() = default;
+
+        /// Assignment.
+        epoll_event&
+        operator=(const epoll_event&) = default;
+
+        /// Get event mask.
+        inline E
+        events() const noexcept {
+            return this->poll_event_base::events;
+        }
+
+        /// Get file descriptor.
+        inline fd_type
+        fd() const noexcept {
+            return this->poll_event_base::data.fd;
+        }
+
+        /// Disable polling by setting file descriptor to -1.
+        inline void
+        disable() noexcept {
+            this->poll_event_base::data.fd = -1;
+        }
+
+        /// Returns true, if file descriptor is invalid.
+        inline bool
+        bad_fd() const noexcept {
+            return this->fd() < 0;
+        }
+
+        /// Returns true, if input event occurred.
+        inline bool
+        in() const noexcept {
+            return (this->events() & event::in) != 0;
+        }
+
+        /// Returns true, if output event occurred.
+        inline bool
+        out() const noexcept {
+            return (this->events() & event::out) != 0;
+        }
+
+        /**
+        Returns true, if hang up event occurred
+        (the other end of the channel was closed).
+        */
+        inline bool
+        hup() const noexcept {
+            return (this->events() & event::hup) != 0;
+        }
+
+        /// Returns true, if an error occurred.
+        inline bool
+        err() const noexcept {
+            return (this->events() & event::err) != 0;
+        }
+
+        /// Returns true, if an error or hang up occurred.
+        inline bool
+        bad() const noexcept {
+            return (this->events() & (event::hup | event::err)) != 0;
+        }
+
+        /// Set events \p rhs in event mask.
+        inline void
+        setev(event rhs) noexcept {
+            this->poll_event_base::events |= E(rhs);
+        }
+
+        /// Unset events \p rhs in event mask.
+        inline void
+        unsetev(event rhs) noexcept {
+            this->poll_event_base::events &= E(~rhs);
+        }
+
+        /// Probe file descriptor by peeking a byte from it.
+        inline ssize_t
+        probe() const noexcept {
+            char c;
+            return ::recv(this->fd(), &c, 1, MSG_PEEK);
+        }
+
+        /// Returns true, if events have the same file descriptor.
+        inline bool
+        operator==(const epoll_event& rhs) const noexcept {
+            return this->fd() == rhs.fd();
+        }
+
+        /// Returns true, if events have different file descriptors.
+        inline bool
+        operator!=(const epoll_event& rhs) const noexcept {
+            return this->fd() != rhs.fd();
+        }
+
+        /// Compares file descriptors.
+        inline bool
+        operator<(const epoll_event& rhs) const noexcept {
+            return this->fd() < rhs.fd();
+        }
+
+        /**
+        Returns true, if file descriptor is valid and
+        no \link bad \endlink events occurred.
+        */
+        inline explicit
+        operator bool() const noexcept {
+            return !this->bad() && !this->bad_fd();
+        }
+
+        /**
+        Returns true, if either file descriptor is invalid, or
+        a \link bad \endlink event occurred.
+        */
+        inline bool
+        operator!() const noexcept {
+            return !this->operator bool();
+        }
+
+        friend std::ostream&
+        operator<<(std::ostream& out, const epoll_event& rhs);
+
+    };
+
+    /// Output file descriptor and event mask for debugging.
+    std::ostream&
+    operator<<(std::ostream& out, const epoll_event& rhs);
+
+    static_assert(
+        sizeof(epoll_event) == sizeof(poll_event_base),
+        "bad epoll_event size"
+    );
+
+}
+
+#endif // vim:filetype=cpp

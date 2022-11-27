@@ -1,0 +1,141 @@
+/*
+UNISTDX — C++ library for Linux system calls.
+© 2020 Ivan Gankevich
+
+This file is part of UNISTDX.
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+#ifndef UNISTDX_NET_NETLINK_SOCKET_ADDRESS
+#define UNISTDX_NET_NETLINK_SOCKET_ADDRESS
+
+#include <unistdx/base/types>
+#include <unistdx/config>
+#include <unistdx/net/family>
+
+#if defined(UNISTDX_HAVE_LINUX_NETLINK_H)
+#include <linux/netlink.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#endif
+
+namespace sys {
+
+    using pid_type = ::pid_t;
+    /// Socket address type.
+    using socket_address_type = ::sockaddr;
+    /// Socket address length type.
+    using socket_length_type = ::socklen_t;
+
+    #if defined(UNISTDX_HAVE_LINUX_NETLINK_H)
+    /// Netlink socket address type.
+    using netlink_socket_address_type = ::sockaddr_nl;
+
+    class netlink_socket_address {
+
+    private:
+        netlink_socket_address_type _address;
+
+    public:
+        /// Construct socket address by specifying process id and netlink groups.
+        inline explicit netlink_socket_address(pid_type id=0, u32 groups=0) noexcept {
+            this->_address.nl_family = AF_NETLINK,
+            this->_address.nl_pid = id,
+            this->_address.nl_groups = groups;
+        }
+        ~netlink_socket_address() = default;
+        netlink_socket_address(const netlink_socket_address&) = default;
+        netlink_socket_address& operator=(const netlink_socket_address&) = default;
+        netlink_socket_address(netlink_socket_address&&) = default;
+        netlink_socket_address& operator=(netlink_socket_address&&) = default;
+        inline constexpr static socket_address_family family() noexcept { return socket_address_family::netlink; }
+        inline constexpr static sa_family_type sa_family() noexcept { return sa_family_type(family()); }
+        inline pid_type id() const noexcept { return this->_address.nl_pid; }
+        inline void id(pid_type rhs) noexcept { this->_address.nl_pid = rhs; }
+        inline u32 groups() const noexcept { return this->_address.nl_groups; }
+        inline void groups(u32 rhs) noexcept { this->_address.nl_groups = rhs; }
+        inline socket_address_type* get() noexcept { return reinterpret_cast<socket_address_type*>(&this->_address); }
+        inline socket_address_type* get() const noexcept { return const_cast<socket_address_type*>(reinterpret_cast<const socket_address_type*>(&this->_address)); }
+        static constexpr inline socket_length_type size() noexcept { return sizeof(netlink_socket_address_type); }
+        inline bool operator<(const netlink_socket_address& rhs) const noexcept {
+            return id() < rhs.id();
+        }
+
+        inline bool operator<=(const netlink_socket_address& rhs) const noexcept {
+            return this->operator<(rhs) || this->operator==(rhs);
+        }
+
+        inline bool operator>(const netlink_socket_address& rhs) const noexcept {
+            return !this->operator<(rhs) && !this->operator==(rhs);
+        }
+
+        inline bool operator>=(const netlink_socket_address& rhs) const noexcept {
+            return !this->operator<(rhs);
+        }
+
+        inline bool operator==(const netlink_socket_address& rhs) const noexcept {
+            return id() == rhs.id();
+        }
+
+        inline bool operator!=(const netlink_socket_address& rhs) const noexcept {
+            return !this->operator==(rhs);
+        }
+
+        inline explicit operator bool() const noexcept { return bool(id()); }
+        inline bool operator!() const noexcept { return !this->operator bool(); }
+
+    };
+
+    std::ostream& operator<<(std::ostream& out, const netlink_socket_address& rhs);
+    std::istream& operator>>(std::istream& in, netlink_socket_address& rhs);
+    bstream& operator<<(bstream& out, const netlink_socket_address& rhs);
+    bstream& operator>>(bstream& in, netlink_socket_address& rhs);
+    #endif
+
+}
+
+namespace std {
+
+    /// Specialisation of \link std::hash \endlink for \link sys::netlink_socket_address \endlink.
+    template<>
+    struct hash<sys::netlink_socket_address>: public hash<sys::pid_type> {
+
+        /**
+        \brief Computes hash by XOR-ing hash of the address with port number.
+        \details
+        Depending on the address family, uses hash of either netlink_address or ipv6_address.
+        */
+        inline size_t
+        operator()(const sys::netlink_socket_address& rhs) const noexcept {
+            return this->hash<sys::pid_type>::operator()(rhs.id());
+        }
+
+    };
+
+}
+
+#endif // vim:filetype=cpp
