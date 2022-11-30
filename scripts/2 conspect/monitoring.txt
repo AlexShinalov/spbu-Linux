@@ -1,0 +1,3 @@
+Мониторин не скпиптом, а через терминал 
+1) cd /sys
+2) find -name "temp*input" 2>/dev/null | xargs cat
