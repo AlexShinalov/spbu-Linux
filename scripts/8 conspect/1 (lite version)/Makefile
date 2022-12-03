@@ -1,2 +1,2 @@
 main.cc: main.hh
-	make main
+	g++ main.cc -o main
