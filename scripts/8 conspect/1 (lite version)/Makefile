@@ -1,2 +1,2 @@
 main: main.cc main.hh
-	g++ main.cc -o main
+	g++ main.cc main.hh -o main
