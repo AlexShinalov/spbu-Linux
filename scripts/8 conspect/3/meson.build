@@ -1,22 +1,20 @@
 project(
-  'myproject',
-  'cpp',
-  version: '0.1.0',
-  meson_version: '>=0.50',
-  default_options: ['cpp_std=c++11']
+    'myproject',                       # название проекта
+    'cpp',                             # язык
+    version: '0.1.0',                  # версия кода
+    meson_version: '>=0.50',           # минимально поддерживаемая версия Meson
+    default_options: ['cpp_std=c++11'] # используемый стандарт C++
 )
-
-
 myproject_src = files([
-    'main.cc'
+    'main.cpp' # список исходных файлов
 ])
 
-zlib = dependency('zlib')
+zlib = dependecy('zlib')
 
 executable(
-    'myproject',
-    include_directories: [],
-    sources: myproject_src,
-    dependencies: [zlib],
-    install: true
+    'myproject',              # название исполняемого файла
+    include_directories: [], # где ищутся заголовочные файлы
+    sources: myproject_src,   # список исходный файлов
+    dependencies: [zlib],         # зависимости проекта (если имеются)
+    install: true             # устанавливать ли файл
 )
