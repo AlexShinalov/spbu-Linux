@@ -9,7 +9,7 @@ myproject_src = files([
     'main.cpp' # список исходных файлов
 ])
 
-zlib = dependency('zlib')
+zlib = dependency('zlib') # подключаем zlib
 
 executable(
     'myproject',              # название исполняемого файла
