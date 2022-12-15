@@ -1,4 +1,20 @@
+TODO: проверить на работоспособность
+сборка с линковкой (ЖАСУР ЭТО МОЖЕТ НЕ ПРИНЯТЬ):
 g++ -O3 -flto -o test1 sha1_benchmark.cc sha1.cc
-time ./test1
 
-ВАЖНО: измените test1 на любое другое название 
+ПРАВИЛЬНЫЙ ВАРИАНТ
+Компиляция:
+g++ -c sha1_benchmark.cc -o filename1.o
+g++ -c sha1.cc -o filename2.o
+
+Линковка без оптимизации:
+g++ filename1.o filename2.o -o final1
+
+Линковка с оптимизацией:
+g++ filename1.o filename2.o -o final2 -O3
+
+Тест времени:
+time ./final1
+time ./final2
+
+ВАЖНО: измените filename, final на любое другое название 
