@@ -1,2 +1,2 @@
-find ./ -type f -exec chmod 664 {} \; для файлов
+find ./ -type f -exec chmod 644 {} \; для файлов
 find ./ -type d -exec chmod 755 {} \;для папок 
