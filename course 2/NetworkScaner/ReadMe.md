@@ -1,6 +1,6 @@
 # Network Scaner
 
-##Install 
+## Install 
 ```bash
 pip install scapy
 pip install python-pyqt5
