@@ -20,5 +20,5 @@ sudo cat ./logger.log | grep <pid>
 ```
 by name 
 ```bash 
-cat ./logger.log | grep $(pidof -s <name>)
+sudo cat ./logger.log | grep $(pidof -s <name>)
 ```
