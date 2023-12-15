@@ -11,7 +11,18 @@ class App(QWidget):
 
         self.__init_ui()
 
-        self.setWindowTitle('Network Scanner')
+        self.setWindowTitle('Scanner')
+        self.setStyleSheet('''
+            background-color: #5A5B7F; 
+            color: #FFFFFF; 
+            QPushButton {
+                background-color: #7D7DAA; 
+                color: #FFFFFF; 
+            }
+            QPushButton:hover {
+                background-color: #AFAFBF; 
+            }
+        ''')
         self.show()
 
     def __init_ui(self) -> None:
@@ -19,9 +30,9 @@ class App(QWidget):
 
         self.ip = QLineEdit()
         main_layout.addWidget(self.ip, 0, 0)
-        main_layout.addWidget(QLabel('Target IP'), 0, 1)
+        main_layout.addWidget(QLabel('Enter IP'), 0, 1)
 
-        host_scan = QPushButton('Scan host')
+        host_scan = QPushButton('Scan IP host')
         host_scan.clicked.connect(
             lambda: self.__show_host_info(scan_host(self.ip.text())))
         main_layout.addWidget(host_scan, 1, 0, 1, 2)
@@ -49,7 +60,7 @@ class App(QWidget):
         timeout.setValue(.1)
         timeout.setSingleStep(.1)
         layout.addWidget(timeout, 1, 0)
-        layout.addWidget(QLabel('Timeout, s'), 1, 1)
+        layout.addWidget(QLabel('Ping time, s'), 1, 1)
 
         port_scan = QPushButton('Scan ports')
         port_scan.clicked.connect(worker)
