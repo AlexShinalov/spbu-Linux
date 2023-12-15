@@ -1,0 +1,3 @@
+/home/nikolay/Backup/build/CMakeFiles/rebuild_cache.dir
+/home/nikolay/Backup/build/CMakeFiles/edit_cache.dir
+/home/nikolay/Backup/build/CMakeFiles/Backup.dir

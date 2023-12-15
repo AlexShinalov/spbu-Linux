@@ -1,0 +1,46 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../libs/mini/ini.h
+string
+-
+sstream
+-
+algorithm
+-
+utility
+-
+unordered_map
+-
+vector
+-
+memory
+-
+fstream
+-
+sys/stat.h
+-
+cctype
+-
+
+/home/nikolay/Backup/src/main.cpp
+mini/ini.h
+-
+filesystem
+-
+iostream
+-
+signal.h
+-
+syslog.h
+-
+thread
+-
+ctime
+-
+
