@@ -1,17 +1,26 @@
 ## Audit system 
 
-## Requride versions of soft:
+## Requirde versions of soft:
 g++ version > 5.00
 
+##Description
+Audit.cpp - main file  
+constant.h - dict with process system names  
+
 ## How to start
-by Pid
+
 ```bash
 g++ Audit.cpp -o audit  
-sudo ./audit 
+
+```
+by Pid  
+
+```bash
+./audit PID
 ```
 by name  
 ```bash
-./audit &(pidof -s <name>)
+./audit $(pidof -s <name>)
 ```
 ## How to find in logs:
 by Pid  

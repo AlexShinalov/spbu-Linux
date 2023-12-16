@@ -51,7 +51,7 @@ int main(int argc, char** argv)
     }
 
     int pid = stoi(argv[1]); 
-    ofstream file("logger.log", ios::app);
+    ofstream file("logs.log", ios::app);
 
     write_command("ptrace is afixed", file, pid);
     ptrace(PTRACE_ATTACH, pid, nullptr, nullptr);
