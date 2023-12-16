@@ -24,6 +24,15 @@ bool cmp(pair<vector<vector<int>>, int> a, pair<vector<vector<int>>, int> b) {
     return a.second < b.second;
 }
 
+void printFiguresInfo() {
+    cout << "King - король" << endl;
+    cout << "Queen - королева" << endl;
+    cout << "Bishop - слон" << endl;
+    cout << "Rook - ладья" << endl;
+    cout << "Pawn - пешка" << endl;
+    cout << "Knight - конь" << endl;
+}
+
 class Chess {
     vector<int> start_board;
     vector<int> bestmoves;
@@ -39,6 +48,7 @@ public:
                                                                                 wR(wR1) { this->createBoard(); }
 
     void createBoard() {
+    board = vector<int>(64, 0);
         for (int i = 0; i < wP; ++i) {
             auto it = find(board.begin(), board.end(), 0);
             if (it != board.end()) {
@@ -342,6 +352,7 @@ public:
 };
 
 int main() {
+    printFiguresInfo();
     Chess party(2, 2, 2, 2, 2, 2, 2, 2);
     party.printBestMoveSequence();
     return 0;
