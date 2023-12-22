@@ -24,14 +24,6 @@ bool cmp(pair<vector<vector<int>>, int> a, pair<vector<vector<int>>, int> b) {
     return a.second < b.second;
 }
 
-void printFiguresInfo() {
-    cout << "King - король" << endl;
-    cout << "Queen - королева" << endl;
-    cout << "Bishop - слон" << endl;
-    cout << "Rook - ладья" << endl;
-    cout << "Pawn - пешка" << endl;
-    cout << "Knight - конь" << endl;
-}
 
 class Chess {
     vector<int> start_board;
@@ -352,7 +344,6 @@ public:
 };
 
 int main() {
-    printFiguresInfo();
     Chess party(2, 2, 2, 2, 2, 2, 2, 2);
     party.printBestMoveSequence();
     return 0;
