@@ -29,11 +29,8 @@ systemctl kill -s SIGCONT backup-daemon
 systemctl stop backup-daemon
 ```
 
-## How to inspect logs
-```bash
-systemctl status backup-daemon 
-```
-or
+## How to see logs
+
 ```bash
 journalctl -u backup-deamon
 ```
