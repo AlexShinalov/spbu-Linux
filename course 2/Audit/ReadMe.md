@@ -25,7 +25,7 @@ by name
 ## How to find in logs:
 by Pid  
 ```bash 
-sudo cat ./logger.log | grep <pid>
+sudo cat ./logs.log | grep <pid>
 ```
 by name 
 ```bash 
